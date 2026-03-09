@@ -4,48 +4,22 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// Reemplaza UI_TCPClient.cs del profe.
-///
-/// CAMBIOS respecto al original:
-///   1. serverAddress y serverPort ahora vienen de GCPConfig (IP del servidor GCP)
-///   2. Antes de conectar llama a la REST API para crear o validar la sala
-///   3. Los mensajes recibidos se muestran en un panel de chat visual
-///   4. Soporta envío de imágenes y archivos (Base64)
-///   5. Selector de protocolo TCP/UDP visible en la UI
-///
-/// LO QUE NO CAMBIA:
-///   - TCPClient.cs del profe se usa EXACTAMENTE igual (misma referencia, mismo IClient)
-///   - Los métodos ConnectToServer(), SendMessageAsync() y Disconnect() son los del profe
-///   - Las interfaces IChatConnection, IClient se usan sin modificar
-/// </summary>
 public class UI_TCPClient_GCP : MonoBehaviour
 {
-    // ── Referencias a scripts del PROFE (sin modificar) ──────
-    [Header("Scripts del profe (sin modificar)")]
-    [SerializeField] private TCPClient clientReference;   // TCPClient.cs original
+    [Header("Script del profe (arrastrar TCPClient aqui)")]
+    [SerializeField] private TCPClient clientReference;
 
-    // ── Panel Menú ────────────────────────────────────────────
-    [Header("Panel Menú")]
-    public GameObject panelMenu;
-    public TMP_InputField inputUsername;
-    public TMP_InputField inputRoomCode;    // Vacío = crear sala nueva
-    public Button         btnConnect;
-    public TMP_Text       lblStatus;
-
-    // ── Panel Chat ────────────────────────────────────────────
     [Header("Panel Chat")]
-    public GameObject     panelChat;
     public ScrollRect     scrollView;
-    public Transform      contentParent;   // Padre de las burbujas
+    public Transform      contentParent;
     public TMP_InputField inputMessage;
     public Button         btnSend;
     public Button         btnSendImage;
     public Button         btnSendPdf;
     public TMP_Text       lblRoomCode;
     public TMP_Text       lblProtocol;
+    public TMP_Text       lblStatus;
 
-    // ── Prefabs de burbuja ────────────────────────────────────
     [Header("Prefabs de burbuja")]
     public GameObject bubbleTextMine;
     public GameObject bubbleTextOther;
@@ -54,173 +28,182 @@ public class UI_TCPClient_GCP : MonoBehaviour
     public GameObject bubbleFileMine;
     public GameObject bubbleFileOther;
 
-    // ── Estado interno ────────────────────────────────────────
-    private IClient _client;       // Apunta al TCPClient.cs del profe
+    private IClient _client;
     private string  _username;
     private string  _roomId;
-
-    // ─────────────────────────────────────────────────────────
+    private bool    _handshakeDone = false; // true cuando el servidor envio WELCOME
 
     void Awake()
     {
-        // Usamos la MISMA interfaz IClient que definió el profe
         _client = clientReference;
     }
 
     void Start()
     {
-        // Suscripción idéntica a la del profe, pero con handlers enriquecidos
+        _username = ProtocolSelector.SelectedUsername;
+        _roomId   = ProtocolSelector.SelectedRoomCode;
+
+        if (string.IsNullOrEmpty(_username) || string.IsNullOrEmpty(_roomId))
+        {
+            if (lblStatus) lblStatus.text = "Error: faltan datos del menu";
+            Debug.LogError("[UI-TCP] Falta username o roomId.");
+            return;
+        }
+
+        // Verificar que los prefabs esten asignados en el Inspector
+        if (!bubbleTextMine)   Debug.LogError("[UI-TCP] bubbleTextMine NO asignado en el Inspector!");
+        if (!bubbleTextOther)  Debug.LogError("[UI-TCP] bubbleTextOther NO asignado en el Inspector!");
+        if (!bubbleImageMine)  Debug.LogError("[UI-TCP] bubbleImageMine NO asignado en el Inspector!");
+        if (!bubbleImageOther) Debug.LogError("[UI-TCP] bubbleImageOther NO asignado en el Inspector!");
+        if (!contentParent)    Debug.LogError("[UI-TCP] contentParent NO asignado en el Inspector!");
+        if (!scrollView)       Debug.LogError("[UI-TCP] scrollView NO asignado en el Inspector!");
+
         _client.OnMessageReceived += HandleMessageReceived;
         _client.OnConnected       += HandleConnection;
         _client.OnDisconnected    += HandleDisconnection;
 
-        panelMenu.SetActive(true);
-        panelChat.SetActive(false);
+        if (btnSend)      btnSend.onClick.AddListener(SendTextMessage);
+        if (btnSendImage) btnSendImage.onClick.AddListener(SendImage);
+        if (btnSendPdf)   btnSendPdf.onClick.AddListener(SendPdf);
 
-        btnConnect.onClick.AddListener(OnConnectClicked);
-        btnSend.onClick.AddListener(SendTextMessage);
-        btnSendImage.onClick.AddListener(SendImage);
-        btnSendPdf.onClick.AddListener(SendPdf);
+        if (lblRoomCode) lblRoomCode.text = $"Sala: {_roomId}";
+        if (lblProtocol) lblProtocol.text = "TCP";
+        if (lblStatus)   lblStatus.text   = "Conectando...";
+
+        ConnectToServer();
     }
 
-    // ── Conectar ──────────────────────────────────────────────
-
-    async void OnConnectClicked()
+    async void ConnectToServer()
     {
-        _username = inputUsername.text.Trim();
-        if (string.IsNullOrEmpty(_username))
-        {
-            lblStatus.text = "⚠ Ingresa tu nombre";
-            return;
-        }
-
-        string code = inputRoomCode.text.Trim().ToUpper();
-        btnConnect.interactable = false;
-        lblStatus.text = "Conectando…";
-
         try
         {
-            // ── Paso 1: Crear o validar sala via REST API ─────
-            if (string.IsNullOrEmpty(code))
-            {
-                // Sin código → crear sala nueva
-                code = await RoomManager.CreateRoomAsync(_username + "'s room");
-                lblStatus.text = $"Sala creada: {code}";
-            }
-            else
-            {
-                bool exists = await RoomManager.RoomExistsAsync(code);
-                if (!exists)
-                {
-                    lblStatus.text = "⚠ Sala no encontrada";
-                    btnConnect.interactable = true;
-                    return;
-                }
-            }
-
-            _roomId = code;
-
-            // ── Paso 2: Conectar por TCP al servidor GCP ──────
-            // Igual que el original del profe, solo cambia la IP y puerto
-            // que ahora vienen de GCPConfig en vez de valores hardcodeados
             await _client.ConnectToServer(GCPConfig.SERVER_IP, GCPConfig.TCP_PORT);
         }
         catch (Exception ex)
         {
-            lblStatus.text = $"Error: {ex.Message}";
-            btnConnect.interactable = true;
+            if (lblStatus) lblStatus.text = $"Error: {ex.Message}";
+            Debug.LogError("[UI-TCP] " + ex.Message);
         }
     }
 
-    // ── Handlers (mismos nombres que el profe, lógica extendida) ─
+    // ── Handlers ──────────────────────────────────────────────
 
     void HandleConnection()
     {
-        Debug.Log("[UI-TCP] Conectado al servidor GCP");
-
+        // Socket conectado — esperar el HELLO del servidor antes de hacer JOIN
+        // NO enviamos JOIN aqui, lo enviamos cuando llegue HELLO
         MainThreadDispatcher.Run(() =>
         {
-            // Enviar JOIN con username y roomId al servidor
-            string joinMsg = $"{{\"type\":\"JOIN\",\"username\":\"{_username}\",\"room_id\":\"{_roomId}\"}}";
-            _client.SendMessageAsync(joinMsg);
-
-            // Cambiar al panel de chat
-            panelMenu.SetActive(false);
-            panelChat.SetActive(true);
-            lblRoomCode.text  = $"Sala: {_roomId}";
-            lblProtocol.text  = "TCP";
+            if (lblStatus) lblStatus.text = "Esperando servidor...";
+            Debug.Log("[UI-TCP] Socket conectado, esperando HELLO del servidor");
         });
     }
 
     void HandleMessageReceived(string json)
     {
-        Debug.Log("[UI-TCP] Recibido: " + json);
-
         MainThreadDispatcher.Run(() =>
         {
-            // Parsear tipo de mensaje
-            if (json.Contains("\"type\":\"CHAT\""))
+            try
             {
-                string sender  = ExtractJson(json, "username");
-                string content = ExtractJson(json, "content");
-                string ftype   = ExtractJson(json, "file_type");
-                bool   isMine  = sender == _username;
+                // ── HELLO: servidor listo → responder con JOIN ────
+                if (json.Contains("\"type\":\"HELLO\""))
+                {
+                    Debug.Log("[UI-TCP] HELLO recibido, enviando JOIN");
+                    string joinMsg = $"{{\"type\":\"JOIN\"," +
+                                     $"\"username\":\"{_username}\"," +
+                                     $"\"room_id\":\"{_roomId}\"}}";
+                    _client.SendMessageAsync(joinMsg);
+                    if (lblStatus) lblStatus.text = "Uniendose a la sala...";
+                    return;
+                }
 
-                if (ftype == "image")
+                // ── WELCOME: handshake completo → habilitar chat ──
+                if (json.Contains("\"type\":\"WELCOME\""))
                 {
-                    string b64 = ExtractJson(json, "file_data");
-                    ShowImageBubble(sender, b64, isMine);
+                    _handshakeDone = true;
+                    if (lblStatus) lblStatus.text = "Conectado";
+                    AddSystemMessage("Conectado a la sala");
+                    Debug.Log("[UI-TCP] WELCOME recibido, chat habilitado");
+                    return;
                 }
-                else if (ftype == "pdf" || ftype == "audio")
+
+                // ── Mensajes de chat (solo si handshake completo) ─
+                if (!_handshakeDone) return;
+
+                if (json.Contains("\"type\":\"CHAT\""))
                 {
-                    string fname = ExtractJson(json, "file_name");
-                    ShowFileBubble(sender, fname, ExtractJson(json, "file_data"), isMine);
+                    // Usar JsonUtility para parsear correctamente (fix Base64 truncado)
+                    ChatMsg msg = JsonUtility.FromJson<ChatMsg>(json);
+
+                    string sender  = msg.username ?? "";
+                    string content = msg.content ?? "";
+                    string ftype   = msg.file_type ?? "text";
+                    bool   isMine  = sender == _username;
+
+                    // Filtrar mensajes propios: ya creamos la burbuja al enviar,
+                    // el servidor hace broadcast a todos incluyendo al emisor
+                    if (isMine)
+                    {
+                        Debug.Log("[UI-TCP] Mensaje propio recibido del servidor (ignorado, ya se mostro)");
+                        return;
+                    }
+
+                    Debug.Log($"[UI-TCP] Mostrando burbuja: sender={sender}, content={content}, file_type={ftype}");
+
+                    if (ftype == "image")
+                        ShowImageBubble(sender, msg.file_data, isMine);
+                    else if (ftype == "pdf" || ftype == "audio")
+                        ShowFileBubble(sender, msg.file_name, msg.file_data, isMine);
+                    else
+                        ShowTextBubble($"{sender}: {content}", isMine);
                 }
-                else
+                else if (json.Contains("\"type\":\"USER_JOINED\""))
                 {
-                    ShowTextBubble($"{sender}: {content}", isMine);
+                    ChatMsg msg = JsonUtility.FromJson<ChatMsg>(json);
+                    AddSystemMessage($"{msg.username} se unio");
                 }
+                else if (json.Contains("\"type\":\"USER_LEFT\""))
+                {
+                    ChatMsg msg = JsonUtility.FromJson<ChatMsg>(json);
+                    AddSystemMessage($"{msg.username} salio");
+                }
+                else if (json.Contains("\"type\":\"PONG\""))
+                    Debug.Log("[UI-TCP] PONG recibido");
             }
-            else if (json.Contains("\"type\":\"WELCOME\""))
+            catch (Exception ex)
             {
-                AddSystemMessage("✅ Conectado a la sala");
-            }
-            else if (json.Contains("\"type\":\"USER_JOINED\""))
-            {
-                string user = ExtractJson(json, "username");
-                AddSystemMessage($"🟢 {user} se unió");
-            }
-            else if (json.Contains("\"type\":\"USER_LEFT\""))
-            {
-                string user = ExtractJson(json, "username");
-                AddSystemMessage($"🔴 {user} salió");
+                Debug.LogError($"[UI-TCP] Error procesando mensaje: {ex.Message}\nJSON: {json.Substring(0, Mathf.Min(200, json.Length))}");
             }
         });
     }
 
     void HandleDisconnection()
     {
-        Debug.Log("[UI-TCP] Desconectado");
-        MainThreadDispatcher.Run(() => AddSystemMessage("❌ Desconectado del servidor"));
+        MainThreadDispatcher.Run(() =>
+        {
+            _handshakeDone = false;
+            AddSystemMessage("Desconectado del servidor");
+            if (lblStatus) lblStatus.text = "Desconectado";
+        });
     }
 
     // ── Enviar texto ──────────────────────────────────────────
 
     public void SendTextMessage()
     {
-        if (!_client.isConnected) { Debug.Log("No conectado"); return; }
+        if (!_client.isConnected)   { Debug.LogWarning("No conectado"); return; }
+        if (!_handshakeDone)        { Debug.LogWarning("Handshake pendiente"); return; }
         if (string.IsNullOrEmpty(inputMessage.text)) return;
 
         string text = inputMessage.text.Trim();
         inputMessage.text = "";
 
-        // Mismo formato que usa el servidor GCP
         string json = $"{{\"type\":\"CHAT\",\"username\":\"{_username}\"," +
                       $"\"room_id\":\"{_roomId}\",\"content\":\"{EscapeJson(text)}\"," +
                       $"\"file_type\":\"text\"}}";
 
         _client.SendMessageAsync(json);
-        ShowTextBubble($"Tú: {text}", true);
+        ShowTextBubble($"Tu: {text}", true);
         ScrollToBottom();
     }
 
@@ -228,12 +211,11 @@ public class UI_TCPClient_GCP : MonoBehaviour
 
     void SendImage()
     {
-        if (!_client.isConnected) return;
-
+        if (!_client.isConnected || !_handshakeDone) return;
 #if UNITY_EDITOR
         string path = UnityEditor.EditorUtility.OpenFilePanel("Seleccionar imagen", "", "png,jpg,jpeg");
 #else
-        string path = OpenNativeFilePicker("png,jpg,jpeg");
+        string path = null;
 #endif
         if (string.IsNullOrEmpty(path)) return;
 
@@ -247,7 +229,7 @@ public class UI_TCPClient_GCP : MonoBehaviour
                       $"\"file_data\":\"{base64}\"}}";
 
         _client.SendMessageAsync(json);
-        ShowImageBubble("Tú", base64, true);
+        ShowImageBubble("Tu", base64, true);
         ScrollToBottom();
     }
 
@@ -255,12 +237,11 @@ public class UI_TCPClient_GCP : MonoBehaviour
 
     void SendPdf()
     {
-        if (!_client.isConnected) return;
-
+        if (!_client.isConnected || !_handshakeDone) return;
 #if UNITY_EDITOR
         string path = UnityEditor.EditorUtility.OpenFilePanel("Seleccionar PDF", "", "pdf");
 #else
-        string path = OpenNativeFilePicker("pdf");
+        string path = null;
 #endif
         if (string.IsNullOrEmpty(path)) return;
 
@@ -274,56 +255,132 @@ public class UI_TCPClient_GCP : MonoBehaviour
                       $"\"file_data\":\"{base64}\"}}";
 
         _client.SendMessageAsync(json);
-        ShowFileBubble("Tú", fname, base64, true);
+        ShowFileBubble("Tu", fname, base64, true);
         ScrollToBottom();
     }
 
-    // ── Burbujas de chat ──────────────────────────────────────
+    // ── Burbujas ──────────────────────────────────────────────
 
     void ShowTextBubble(string text, bool isMine)
     {
-        var go    = Instantiate(isMine ? bubbleTextMine : bubbleTextOther, contentParent);
-        var label = go.GetComponentInChildren<TMP_Text>();
-        if (label) label.text = text;
+        GameObject prefab = isMine ? bubbleTextMine : bubbleTextOther;
+        if (prefab == null)
+        {
+            Debug.LogError($"[UI-TCP] Prefab de burbuja de texto es NULL (isMine={isMine}). Asignalo en el Inspector!");
+            return;
+        }
+        if (contentParent == null)
+        {
+            Debug.LogError("[UI-TCP] contentParent es NULL. Asignalo en el Inspector!");
+            return;
+        }
+
+        var go  = Instantiate(prefab, contentParent);
+        ResetRectTransform(go);
+        var lbl = go.GetComponentInChildren<TMP_Text>();
+        if (lbl) lbl.text = text;
+        Debug.Log($"[UI-TCP] Burbuja de texto creada: '{text}' (isMine={isMine})");
+        ScrollToBottom();
     }
 
     void AddSystemMessage(string text) => ShowTextBubble(text, false);
 
     void ShowImageBubble(string sender, string base64, bool isMine)
     {
-        if (string.IsNullOrEmpty(base64)) return;
+        if (string.IsNullOrEmpty(base64))
+        {
+            Debug.LogWarning("[UI-TCP] ShowImageBubble: base64 vacio, no se puede mostrar imagen");
+            return;
+        }
 
-        byte[]    bytes   = Convert.FromBase64String(base64);
-        Texture2D tex     = new Texture2D(2, 2);
-        tex.LoadImage(bytes);
-        Sprite sprite = Sprite.Create(tex,
-            new Rect(0, 0, tex.width, tex.height), Vector2.one * 0.5f);
+        GameObject prefab = isMine ? bubbleImageMine : bubbleImageOther;
+        if (prefab == null)
+        {
+            Debug.LogError($"[UI-TCP] Prefab de burbuja de imagen es NULL (isMine={isMine}). Asignalo en el Inspector!");
+            return;
+        }
 
-        var go  = Instantiate(isMine ? bubbleImageMine : bubbleImageOther, contentParent);
-        var img = go.GetComponentInChildren<Image>();
-        if (img) img.sprite = sprite;
+        try
+        {
+            byte[]    bytes  = Convert.FromBase64String(base64);
+            Texture2D tex    = new Texture2D(2, 2);
+            tex.LoadImage(bytes);
+            Sprite sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), Vector2.one * 0.5f);
 
-        var lbl = go.GetComponentInChildren<TMP_Text>();
-        if (lbl) lbl.text = isMine ? "Tú" : sender;
+            var go  = Instantiate(prefab, contentParent);
+            ResetRectTransform(go);
+
+            // Buscar el Image para la foto (ignorar el fondo del prefab)
+            // Intentar primero por nombre "PhotoImage", si no existe usar GetComponentInChildren
+            var photoTransform = go.transform.Find("PhotoImage");
+            Image img = photoTransform != null
+                ? photoTransform.GetComponent<Image>()
+                : go.GetComponentInChildren<Image>();
+            if (img) img.sprite = sprite;
+
+            var lbl = go.GetComponentInChildren<TMP_Text>();
+            if (lbl) lbl.text = isMine ? "Tu" : sender;
+
+            Debug.Log($"[UI-TCP] Burbuja de imagen creada: sender={sender} (isMine={isMine}), bytes={bytes.Length}");
+            ScrollToBottom();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"[UI-TCP] Error al decodificar imagen: {ex.Message}");
+        }
     }
 
     void ShowFileBubble(string sender, string fileName, string base64, bool isMine)
     {
-        var go  = Instantiate(isMine ? bubbleFileMine : bubbleFileOther, contentParent);
-        var lbl = go.GetComponentInChildren<TMP_Text>();
-        if (lbl) lbl.text = $"📎 {(isMine ? "Tú" : sender)}: {fileName}";
+        GameObject prefab = isMine ? bubbleFileMine : bubbleFileOther;
+        if (prefab == null)
+        {
+            Debug.LogError($"[UI-TCP] Prefab de burbuja de archivo es NULL (isMine={isMine}). Asignalo en el Inspector!");
+            return;
+        }
 
-        // Botón para guardar el archivo localmente
+        var go  = Instantiate(prefab, contentParent);
+        ResetRectTransform(go);
+        var lbl = go.GetComponentInChildren<TMP_Text>();
+        if (lbl) lbl.text = $"{(isMine ? "Tu" : sender)}: {fileName}";
+
         var btn = go.GetComponentInChildren<Button>();
         if (btn != null && !string.IsNullOrEmpty(base64))
         {
+            string fn  = fileName;
+            string b64 = base64;
             btn.onClick.AddListener(() =>
             {
-                byte[] bytes = Convert.FromBase64String(base64);
-                string savePath = Path.Combine(Application.persistentDataPath, fileName);
-                File.WriteAllBytes(savePath, bytes);
-                Debug.Log($"Archivo guardado en: {savePath}");
+                try
+                {
+                    byte[] b = Convert.FromBase64String(b64);
+                    string savePath = Path.Combine(Application.persistentDataPath, fn);
+                    File.WriteAllBytes(savePath, b);
+                    Application.OpenURL("file://" + savePath);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[UI-TCP] Error al guardar archivo: {ex.Message}");
+                }
             });
+        }
+        Debug.Log($"[UI-TCP] Burbuja de archivo creada: {fileName} (isMine={isMine})");
+        ScrollToBottom();
+    }
+
+    /// <summary>
+    /// Resetea posición/escala del RectTransform para que la burbuja
+    /// aparezca correctamente dentro del Content del ScrollView.
+    /// </summary>
+    void ResetRectTransform(GameObject go)
+    {
+        go.SetActive(true);
+        var rt = go.GetComponent<RectTransform>();
+        if (rt != null)
+        {
+            rt.localScale = Vector3.one;
+            rt.localPosition = Vector3.zero;
+            rt.anchoredPosition3D = Vector3.zero;
         }
     }
 
@@ -333,25 +390,5 @@ public class UI_TCPClient_GCP : MonoBehaviour
         if (scrollView) scrollView.verticalNormalizedPosition = 0f;
     }
 
-    // ── Utilidades ────────────────────────────────────────────
-
-    /// <summary>Extrae un valor string de un JSON simple sin dependencias.</summary>
-    string ExtractJson(string json, string key)
-    {
-        string search = $"\"{key}\":\"";
-        int start = json.IndexOf(search);
-        if (start < 0) return "";
-        start += search.Length;
-        int end = json.IndexOf("\"", start);
-        return end < 0 ? "" : json.Substring(start, end - start);
-    }
-
     string EscapeJson(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
-
-    string OpenNativeFilePicker(string ext)
-    {
-        // En builds standalone usa NativeFilePicker u otra librería
-        Debug.LogWarning("Usa NativeFilePicker en builds. Solo disponible en Editor.");
-        return null;
-    }
 }

@@ -1,103 +1,193 @@
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Script para la escena del Menú Principal.
-///
-/// El usuario elige aquí:
-///   1. Su nombre de usuario
-///   2. El protocolo: TCP o UDP  (requisito explícito del enunciado)
-///   3. Código de sala (vacío = crear nueva)
-///
-/// Al pulsar Conectar carga la escena del protocolo elegido.
+/// Flujo correcto del menú principal:
+///   [Nueva Sala] → API crea sala → muestra código → usuario lo comparte
+///   [Unirse]     → usuario escribe código → valida → habilita Conectar
+///   [Conectar]   → elige protocolo → carga escena de chat
 /// </summary>
 public class ProtocolSelector : MonoBehaviour
 {
-    [Header("UI")]
+    [Header("Datos del usuario")]
     public TMP_InputField inputUsername;
-    public TMP_InputField inputRoomCode;
-    public Toggle         toggleTCP;
-    public Toggle         toggleUDP;
-    public Button         btnConnect;
-    public TMP_Text       lblStatus;
     public TMP_Text       lblServerInfo;
 
-    [Header("Nombres de escenas")]
+    [Header("Gestión de sala")]
+    public Button         btnNuevaSala;
+    public Button         btnUnirse;
+    public TMP_InputField inputRoomCode;
+    public TMP_Text       lblRoomCode;
+    public TMP_Text       lblStatus;
+
+    [Header("Selector de protocolo")]
+    public Toggle         toggleTCP;
+    public Toggle         toggleUDP;
+    public TMP_Text       lblProtocolDesc;
+
+    [Header("Conectar")]
+    public Button         btnConectar;
+
+    [Header("Escenas")]
     public string sceneTCP = "Chat_TCP";
     public string sceneUDP = "Chat_UDP";
 
-    // Guardar selección para que la escena de chat la lea
-    public static string  SelectedUsername  { get; private set; }
-    public static string  SelectedRoomCode  { get; private set; }
-    public static bool    UseTCP            { get; private set; } = true;
+    // Datos que pasan a la escena de chat
+    public static string SelectedUsername  { get; private set; }
+    public static string SelectedRoomCode  { get; private set; }
+    public static bool   UseTCP            { get; private set; } = true;
+
+    private bool _roomReady = false;
 
     void Start()
     {
-        // Mostrar IP del servidor configurada
-        lblServerInfo.text = $"Servidor: {GCPConfig.SERVER_IP}";
+        if (lblServerInfo)
+            lblServerInfo.text = $"Servidor: {GCPConfig.SERVER_IP}";
 
-        toggleTCP.onValueChanged.AddListener(v => { if (v) UseTCP = true;  UpdateLabel(); });
-        toggleUDP.onValueChanged.AddListener(v => { if (v) UseTCP = false; UpdateLabel(); });
+        toggleTCP.onValueChanged.AddListener(v => { if (v) { UseTCP = true;  UpdateProtocolLabel(); } });
+        toggleUDP.onValueChanged.AddListener(v => { if (v) { UseTCP = false; UpdateProtocolLabel(); } });
         toggleTCP.isOn = true;
-        UpdateLabel();
+        UpdateProtocolLabel();
 
-        btnConnect.onClick.AddListener(OnConnectClicked);
+        btnNuevaSala.onClick.AddListener(OnNuevaSalaClicked);
+        btnUnirse.onClick.AddListener(OnUnirseClicked);
+        btnConectar.onClick.AddListener(OnConectarClicked);
+
+        // Conectar deshabilitado hasta que haya sala lista
+        btnConectar.interactable = false;
+        lblRoomCode.text = "";
+        lblStatus.text   = "";
     }
 
-    void UpdateLabel()
+    void UpdateProtocolLabel()
     {
-        lblStatus.text = UseTCP
-            ? "Protocolo seleccionado: TCP  (confiable, con orden garantizado)"
-            : "Protocolo seleccionado: UDP  (rápido, sin garantía de entrega)";
+        if (!lblProtocolDesc) return;
+        lblProtocolDesc.text = UseTCP
+            ? "TCP — Confiable, con orden garantizado"
+            : "UDP — Rapido, sin garantia de entrega";
     }
 
-    async void OnConnectClicked()
+    // ── Crear sala nueva ──────────────────────────────────────
+
+    async void OnNuevaSalaClicked()
     {
         string username = inputUsername.text.Trim();
-        string code     = inputRoomCode.text.Trim().ToUpper();
-
         if (string.IsNullOrEmpty(username))
         {
-            lblStatus.text = "⚠ Ingresa tu nombre de usuario";
+            lblStatus.text = "Ingresa tu nombre primero";
             return;
         }
 
-        btnConnect.interactable = false;
-        lblStatus.text = "Verificando sala…";
+        SetButtonsInteractable(false);
+        lblStatus.text = "Creando sala...";
 
         try
         {
-            if (string.IsNullOrEmpty(code))
+            string roomId = await RoomManager.CreateRoomAsync(username + "s room");
+
+            SelectedRoomCode         = roomId;
+            inputRoomCode.text       = roomId;
+            lblRoomCode.text         = $"Codigo: {roomId}  (comparte este codigo)";
+            lblStatus.text           = "Sala creada correctamente";
+            _roomReady               = true;
+            btnConectar.interactable = true;
+        }
+        catch (Exception ex)
+        {
+            lblStatus.text = $"Error al crear sala: {ex.Message}";
+        }
+        finally
+        {
+            SetButtonsInteractable(true);
+        }
+    }
+
+    // ── Unirse con código ─────────────────────────────────────
+
+    async void OnUnirseClicked()
+    {
+        string username = inputUsername.text.Trim();
+        if (string.IsNullOrEmpty(username))
+        {
+            lblStatus.text = "Ingresa tu nombre primero";
+            return;
+        }
+
+        string code = inputRoomCode.text.Trim().ToUpper();
+        if (string.IsNullOrEmpty(code))
+        {
+            lblStatus.text = "Ingresa el codigo de sala";
+            return;
+        }
+
+        SetButtonsInteractable(false);
+        lblStatus.text = $"Verificando sala {code}...";
+
+        try
+        {
+            bool exists = await RoomManager.RoomExistsAsync(code);
+
+            if (exists)
             {
-                // Crear sala nueva
-                code = await RoomManager.CreateRoomAsync(username + "'s room");
-                lblStatus.text = $"Sala creada: {code} — cargando…";
+                SelectedRoomCode         = code;
+                lblRoomCode.text         = $"Sala {code} encontrada";
+                lblStatus.text           = "Elige el protocolo y conecta";
+                _roomReady               = true;
+                btnConectar.interactable = true;
             }
             else
             {
-                // Verificar que la sala existe
-                bool exists = await RoomManager.RoomExistsAsync(code);
-                if (!exists)
-                {
-                    lblStatus.text = "⚠ Sala no encontrada. Verifica el código.";
-                    btnConnect.interactable = true;
-                    return;
-                }
+                lblStatus.text           = $"Sala {code} no encontrada";
+                lblRoomCode.text         = "";
+                _roomReady               = false;
+                btnConectar.interactable = false;
             }
-
-            // Guardar para la escena de chat
-            SelectedUsername = username;
-            SelectedRoomCode = code;
-
-            // Cargar escena según protocolo elegido
-            SceneManager.LoadScene(UseTCP ? sceneTCP : sceneUDP);
         }
-        catch (System.Exception ex)
+        catch (Exception ex)
         {
-            lblStatus.text = $"Error de conexión: {ex.Message}";
-            btnConnect.interactable = true;
+            lblStatus.text = $"Error: {ex.Message}";
         }
+        finally
+        {
+            SetButtonsInteractable(true);
+        }
+    }
+
+    // ── Conectar ──────────────────────────────────────────────
+
+    void OnConectarClicked()
+    {
+        string username = inputUsername.text.Trim();
+        if (string.IsNullOrEmpty(username))
+        {
+            lblStatus.text = "Ingresa tu nombre";
+            return;
+        }
+
+        if (!_roomReady)
+        {
+            lblStatus.text = "Crea o unete a una sala primero";
+            return;
+        }
+
+        SelectedUsername  = username;
+        _sceneChanging    = true;   // Marcar antes de cambiar escena
+        SceneManager.LoadScene(UseTCP ? sceneTCP : sceneUDP);
+    }
+
+    // ── Helper ────────────────────────────────────────────────
+
+    // Evita tocar UI después de que la escena cambió
+    private bool _sceneChanging = false;
+
+    void SetButtonsInteractable(bool state)
+    {
+        if (_sceneChanging) return;
+        if (btnNuevaSala != null) btnNuevaSala.interactable = state;
+        if (btnUnirse    != null) btnUnirse.interactable    = state;
+        if (btnConectar  != null) btnConectar.interactable  = state && _roomReady;
     }
 }
