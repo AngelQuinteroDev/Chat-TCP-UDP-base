@@ -17,6 +17,10 @@ public class UDPClient : MonoBehaviour, IClient
 
     public bool isConnected { get; private set; }
 
+    // username y roomId se setean desde UI_UDPClient_GCP antes de ConnectToServer
+    [HideInInspector] public string connectUsername = "guest";
+    [HideInInspector] public string connectRoomId   = "default";
+
     public async Task ConnectToServer(string ipAddress, int port)
     {
         udpClient      = new UdpClient();
@@ -25,7 +29,11 @@ public class UDPClient : MonoBehaviour, IClient
         isConnected = true;
         _ = ReceiveLoop();
 
-        await SendMessageAsync("CONNECT"); // Mensaje inicial identico al original del profe
+        // Enviar CONNECT con JSON completo — el servidor GCP lo necesita para
+        // registrar al cliente en la sala correcta desde el primer mensaje
+        string connectMsg = $"{{\"type\":\"CONNECT\",\"username\":\"{connectUsername}\"," +
+                            $"\"room_id\":\"{connectRoomId}\"}}";
+        await SendMessageAsync(connectMsg);
     }
 
     private async Task ReceiveLoop()
@@ -35,10 +43,10 @@ public class UDPClient : MonoBehaviour, IClient
             while (isConnected)
             {
                 UdpReceiveResult result  = await udpClient.ReceiveAsync();
-                string           message = Encoding.UTF8.GetString(result.Buffer).Trim(); // Trim elimina el \n del servidor
+                string           message = Encoding.UTF8.GetString(result.Buffer).Trim();
 
-                // El servidor GCP manda {"type":"CONNECTED",...} en vez de "CONNECTED" plano
-                // Aceptamos ambos para mantener compatibilidad con el servidor del profe
+                // El servidor GCP responde {"type":"CONNECTED",...}
+                // El servidor del profe responde "CONNECTED" plano
                 if (message == "CONNECTED" || message.Contains("\"type\":\"CONNECTED\""))
                 {
                     Debug.Log("[Client] Server Answered");

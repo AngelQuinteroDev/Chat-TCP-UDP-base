@@ -58,6 +58,9 @@ public class UI_UDPClient_GCP : MonoBehaviour
         if (btnSendImage) btnSendImage.onClick.AddListener(SendImage);
         if (btnSendPdf)   btnSendPdf.onClick.AddListener(SendPdf);
 
+        // Pasar username y roomId al UDPClient para que el CONNECT inicial sea correcto
+        clientReference.connectUsername = _username;
+        clientReference.connectRoomId   = _roomId;
         _client.ConnectToServer(GCPConfig.SERVER_IP, GCPConfig.UDP_PORT);
     }
 
@@ -65,17 +68,13 @@ public class UI_UDPClient_GCP : MonoBehaviour
 
     void HandleConnection()
     {
-        // El profe dispara OnConnected cuando recibe "CONNECTED" del servidor.
-        // Aprovechamos ese momento para enviar el JOIN enriquecido con JSON.
-        Debug.Log("[UI-UDP] Servidor respondio CONNECTED, enviando JOIN");
-
-        MainThreadDispatcher.Run(() =>
-        {
-            string join = $"{{\"type\":\"JOIN\",\"username\":\"{_username}\"," +
-                          $"\"room_id\":\"{_roomId}\"}}";
-            _client.SendMessageAsync(join);
-
-            if (lblStatus) lblStatus.text = "Uniendose a la sala...";
+        // El servidor ya registró al cliente con el CONNECT inicial (que incluye username y room_id)
+        // Solo actualizamos la UI
+        Debug.Log("[UI-UDP] Conectado al servidor GCP");
+        MainThreadDispatcher.Run(() => {
+            if (lblStatus) lblStatus.text = "Conectado";
+            AddSystemMessage("Conectado a la sala " + _roomId);
+            _handshakeDone = true;
         });
     }
 
@@ -87,15 +86,7 @@ public class UI_UDPClient_GCP : MonoBehaviour
         {
             try
             {
-                // WELCOME: handshake completo
-                if (json.Contains("\"type\":\"WELCOME\""))
-                {
-                    _handshakeDone = true;
-                    if (lblStatus) lblStatus.text = "Conectado";
-                    AddSystemMessage("Conectado a la sala " + _roomId);
-                    return;
-                }
-
+                // WELCOME no aplica a UDP — el handshake se completa en HandleConnection
                 if (!_handshakeDone) return;
 
                 if (json.Contains("\"type\":\"CHAT\""))
