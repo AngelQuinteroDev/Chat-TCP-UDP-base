@@ -17,7 +17,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
     public Button         btnSend;
     public Button         btnSendImage;
     public Button         btnSendPdf;
-    public Button         btnBack;
     public TMP_Text       lblRoomCode;
     public TMP_Text       lblProtocol;
     public TMP_Text       lblStatus;
@@ -34,6 +33,16 @@ public class UI_TCPClient_GCP : MonoBehaviour
     private string  _username;
     private string  _roomId;
     private bool    _handshakeDone = false; // true cuando el servidor envio WELCOME
+    private bool    _sceneChanging  = false; // evita callbacks tras LoadScene
+
+    public void GoToProtocolScene()
+    {
+        _sceneChanging = true;
+        if (_client != null && _client.isConnected)
+            _client.Disconnect();
+        UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
+    }
+
 
     void Awake()
     {
@@ -68,7 +77,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
         if (btnSendImage) btnSendImage.onClick.AddListener(SendImage);
         if (btnSendPdf)   btnSendPdf.onClick.AddListener(SendPdf);
 
-        if (btnBack) btnBack.onClick.AddListener(GoToProtocolScene);
 
         if (lblRoomCode) lblRoomCode.text = $"Sala: {_roomId}";
         if (lblProtocol) lblProtocol.text = "TCP";
@@ -90,15 +98,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
         }
     }
 
-        public void GoToProtocolScene()
-    {
-        if (_client != null && _client.isConnected)
-        {
-            _client.Disconnect();
-        }
-
-        SceneManager.LoadScene("MainMenu");
-    }
 
     // ── Handlers ──────────────────────────────────────────────
 
@@ -119,6 +118,7 @@ public class UI_TCPClient_GCP : MonoBehaviour
         {
             try
             {
+                if (_sceneChanging) return;
                 // ── HELLO: servidor listo → responder con JOIN ────
                 if (json.Contains("\"type\":\"HELLO\""))
                 {
@@ -195,6 +195,7 @@ public class UI_TCPClient_GCP : MonoBehaviour
     {
         MainThreadDispatcher.Run(() =>
         {
+             if (_sceneChanging) return;
             _handshakeDone = false;
             AddSystemMessage("Desconectado del servidor");
             if (lblStatus) lblStatus.text = "Desconectado";

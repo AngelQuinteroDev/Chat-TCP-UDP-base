@@ -34,6 +34,16 @@ public class UI_UDPClient_GCP : MonoBehaviour
     private string  _username;
     private string  _roomId;
     private bool    _handshakeDone = false;
+    private bool    _sceneChanging  = false; // evita callbacks tras LoadScene
+
+    public void GoToProtocolScene()
+    {
+        _sceneChanging = true;
+        if (_client != null && _client.isConnected)
+            _client.Disconnect();
+        UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
+    }
+
     
 
     void Awake()
@@ -61,7 +71,6 @@ public class UI_UDPClient_GCP : MonoBehaviour
         if (btnSendImage) btnSendImage.onClick.AddListener(SendImage);
         if (btnSendPdf)   btnSendPdf.onClick.AddListener(SendPdf);
 
-        if (btnBack) btnBack.onClick.AddListener(GoToProtocolScene);
 
         // Pasar username y roomId al UDPClient para que el CONNECT inicial sea correcto
         clientReference.connectUsername = _username;
@@ -69,15 +78,6 @@ public class UI_UDPClient_GCP : MonoBehaviour
         _client.ConnectToServer(GCPConfig.SERVER_IP, GCPConfig.UDP_PORT);
     }
 
-    public void GoToProtocolScene()
-    {
-        if (_client != null && _client.isConnected)
-        {
-            _client.Disconnect();
-        }
-
-        SceneManager.LoadScene("MainMenu");
-    }
 
     // ── Handlers ──────────────────────────────────────────────
 
@@ -101,6 +101,7 @@ public class UI_UDPClient_GCP : MonoBehaviour
         {
             try
             {
+                if (_sceneChanging) return;
                 // WELCOME no aplica a UDP — el handshake se completa en HandleConnection
                 if (!_handshakeDone) return;
 
@@ -136,6 +137,7 @@ public class UI_UDPClient_GCP : MonoBehaviour
     void HandleDisconnection()
     {
         MainThreadDispatcher.Run(() => {
+            if (_sceneChanging) return; 
             if (lblStatus) lblStatus.text = "Desconectado";
         });
     }
