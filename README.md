@@ -39,6 +39,30 @@ La interfaz gráfica (UI) ha sido refactorizada para incluir menús de unificaci
 
 A diferencia de la versión original (que era P2P y requería que un usuario alojara el servidor localmente en una escena separada), este proyecto implementa un servidor centralizado en C# (.NET) en una Máquina Virtual de GCP. 
 
+```text
+               +---------------------------------------------------+
+               |               GOOGLE CLOUD PLATFORM               |
+               |                                                   |
+               |    +-----------------------------------------+    |
+               |    |             Chat Server (.NET)          |    |
+               |    |                                         |    |
+               |    |   [ REST API ]   [ TCP ]     [ UDP ]    |    |
+               |    |   (Port 5000)  (Port 9000) (Port 9001)  |    |
+               |    +--------+------------+-----------+-------+    |
+               |             |            |           |            |
+               +-------------|------------|-----------|------------+
+                             |            |           |
+       HTTP (Room Creation/Check)         |           |
+                             |            |           |
+        +--------------------+            |           |
+        |                                 |           |
++-------v---------+               +-------v---------+ +-------v---------+
+|                 |               |                 | |                 |
+|  Client 1 (PC)  |<--- TCP/UDP --->|  Client 2 (Mac) |<-> Client 3 ...   |
+|                 |               |                 | |                 |
++-----------------+               +-----------------+ +-----------------+
+```
+
 - **API REST (Puerto 5000)**: Proporciona endpoints para la gestión de salas (creación y verificación de existencia de salas). El script `RoomManager.cs` maneja las solicitudes HTTP desde Unity.
 - **Servidor TCP (Puerto 9000)**: Gestiona las conexiones TCP persistentes, el handshake de unión a las salas y el envío/recepción de datos de manera confiable y ordenada.
 - **Servidor UDP (Puerto 9001)**: Gestiona las conexiones UDP para aquellos clientes que eligen una comunicación más rápida sin garantía de entrega.
@@ -55,6 +79,34 @@ En Unity, la conexión al servidor está centralizada de forma sencilla en el ar
   - Imágenes (Visualizadas directamente en los globos de chat).
   - Archivos adicionales (Ej. PDF) descargables en el dispositivo local.
 - **Interfaz Renovada**: Escenas actualizadas en `GCP_UI` con prefab de burbujas ajustables, scroll views y notificaciones del sistema separadas.
+
+---
+
+## Flujo de Usuario (User Flow) e Interfaz
+
+La aplicación cuenta con un flujo intuitivo y directo gracias a la refactorización de la UI. A continuación explicamos cada pantalla y su rol en la conexión:
+
+### 1. Menú Principal (Creación y Unión de Salas)
+![Menú Principal](docs/MainMenu.png)
+En esta pantalla principal (escena `MainMenu`), el usuario inicia su interacción con la aplicación:
+- **Nombre de usuario**: Campo obligatorio para identificarse en el chat.
+- **Gestión de Salas**: 
+  - El botón **"Nueva Sala"** hace una petición HTTP `POST` a nuestra API REST en GCP (Puerto 5000), el servidor crea una sala única virtual y devuelve un código de 6 caracteres que se muestra en pantalla.
+  - El botón **"Verificar y Unirse"** permite introducir un código existente. La aplicación hace un `GET` a la API REST para asegurar que la sala sí existe antes de permitir avanzar.
+
+### 2. Selector de Protocolo
+![Selector Protocolo](docs/Selector_Protocolo.png)
+Una vez validada la sala (ya sea porque la creamos o porque nos unimos exitosamente), se habilitan las opciones inferiores en el mismo menú principal:
+- El usuario debe escoger explícitamente entre el protocolo **TCP** o **UDP**. La UI muestra una breve descripción de las ventajas de cada uno (TCP es seguro y ordenado, UDP es rápido pero no garantiza la entrega).
+- Al tener la sala lista y el protocolo seleccionado, se habilita el botón **"Conectar a Sala"**, que cargará la escena de chat correspondiente en Unity.
+
+### 3. Interfaz de Chat (TCP y UDP)
+![Chat TCP](docs/ChatTCP.png)
+![Chat UDP](docs/ChatUDP.png)
+Ambas interfaces (tanto para TCP como para UDP) han sido unificadas visualmente para ofrecer la misma experiencia de usuario:
+- Muestran el identificador de la sala actual y el protocolo en uso en la parte superior.
+- **Burbujas dinámicas**: Los mensajes se renderizan en una lista mediante un **Scroll View** adaptativo. Los mensajes propios aparecen a la derecha (en verde) y los de los demás a la izquierda (en blanco).
+- Adicionalmente, se cuenta con botones inferiores para **enviar imágenes** (las cuales se decodifican desde Base64 y se renderizan **dentro** del chat) y **enviar archivos (PDF/Audio)**, los cuales generan una burbuja con un botón que permite descargar el contenido recibido para guardarlo localmente en el PC.
 
 ---
 
@@ -133,7 +185,7 @@ Toda la documentación en formato Markdown está en la carpeta `docs/`. Estos do
 
 **Equipo de Desarrollo**
 
-Link del proyecto: [https://github.com/TU_USUARIO/Chat-TCP-UDP](https://github.com/TU_USUARIO/Chat-TCP-UDP)
+Link del proyecto: [https://github.com/AngelQuinteroDev/Chat-TCP-UDP](https://github.com/AngelQuinteroDev/Chat-TCP-UDP)
 
 ---
 
