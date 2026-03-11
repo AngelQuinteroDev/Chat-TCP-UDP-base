@@ -34,7 +34,7 @@ public class UI_UDPClient_GCP : MonoBehaviour
     private string  _username;
     private string  _roomId;
     private bool    _handshakeDone = false;
-    private bool    _sceneChanging  = false; // evita callbacks tras LoadScene
+    private bool    _sceneChanging  = false; 
 
     public void GoToProtocolScene()
     {
@@ -72,19 +72,14 @@ public class UI_UDPClient_GCP : MonoBehaviour
         if (btnSendPdf)   btnSendPdf.onClick.AddListener(SendPdf);
 
 
-        // Pasar username y roomId al UDPClient para que el CONNECT inicial sea correcto
         clientReference.connectUsername = _username;
         clientReference.connectRoomId   = _roomId;
         _client.ConnectToServer(GCPConfig.SERVER_IP, GCPConfig.UDP_PORT);
     }
 
 
-    // ── Handlers ──────────────────────────────────────────────
-
     void HandleConnection()
     {
-        // El servidor ya registró al cliente con el CONNECT inicial (que incluye username y room_id)
-        // Solo actualizamos la UI
         Debug.Log("[UI-UDP] Conectado al servidor GCP");
         MainThreadDispatcher.Run(() => {
             if (lblStatus) lblStatus.text = "Conectado";
@@ -102,7 +97,6 @@ public class UI_UDPClient_GCP : MonoBehaviour
             try
             {
                 if (_sceneChanging) return;
-                // WELCOME no aplica a UDP — el handshake se completa en HandleConnection
                 if (!_handshakeDone) return;
 
                 if (json.Contains("\"type\":\"CHAT\""))
@@ -112,7 +106,6 @@ public class UI_UDPClient_GCP : MonoBehaviour
                     string ftype   = ExtractJson(json, "file_type");
                     bool   isMine  = sender == _username;
 
-                    // Mensajes propios ya se muestran al enviar
                     if (isMine) return;
 
                     if (ftype == "image")
@@ -141,8 +134,6 @@ public class UI_UDPClient_GCP : MonoBehaviour
             if (lblStatus) lblStatus.text = "Desconectado";
         });
     }
-
-    // ── Enviar mensajes ───────────────────────────────────────
 
     public void SendTextMessage()
     {
@@ -208,8 +199,6 @@ public class UI_UDPClient_GCP : MonoBehaviour
         ShowFileBubble("Tu", fname, base64, true);
         ScrollToBottom();
     }
-
-    // ── Burbujas ──────────────────────────────────────────────
 
     void ShowTextBubble(string text, bool isMine)
     {

@@ -32,8 +32,8 @@ public class UI_TCPClient_GCP : MonoBehaviour
     private IClient _client;
     private string  _username;
     private string  _roomId;
-    private bool    _handshakeDone = false; // true cuando el servidor envio WELCOME
-    private bool    _sceneChanging  = false; // evita callbacks tras LoadScene
+    private bool    _handshakeDone = false;
+    private bool    _sceneChanging  = false;
 
     public void GoToProtocolScene()
     {
@@ -61,7 +61,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
             return;
         }
 
-        // Verificar que los prefabs esten asignados en el Inspector
         if (!bubbleTextMine)   Debug.LogError("[UI-TCP] bubbleTextMine NO asignado en el Inspector!");
         if (!bubbleTextOther)  Debug.LogError("[UI-TCP] bubbleTextOther NO asignado en el Inspector!");
         if (!bubbleImageMine)  Debug.LogError("[UI-TCP] bubbleImageMine NO asignado en el Inspector!");
@@ -99,12 +98,8 @@ public class UI_TCPClient_GCP : MonoBehaviour
     }
 
 
-    // ── Handlers ──────────────────────────────────────────────
-
     void HandleConnection()
     {
-        // Socket conectado — esperar el HELLO del servidor antes de hacer JOIN
-        // NO enviamos JOIN aqui, lo enviamos cuando llegue HELLO
         MainThreadDispatcher.Run(() =>
         {
             if (lblStatus) lblStatus.text = "Esperando servidor...";
@@ -119,7 +114,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
             try
             {
                 if (_sceneChanging) return;
-                // ── HELLO: servidor listo → responder con JOIN ────
                 if (json.Contains("\"type\":\"HELLO\""))
                 {
                     Debug.Log("[UI-TCP] HELLO recibido, enviando JOIN");
@@ -131,7 +125,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
                     return;
                 }
 
-                // ── WELCOME: handshake completo → habilitar chat ──
                 if (json.Contains("\"type\":\"WELCOME\""))
                 {
                     _handshakeDone = true;
@@ -141,12 +134,10 @@ public class UI_TCPClient_GCP : MonoBehaviour
                     return;
                 }
 
-                // ── Mensajes de chat (solo si handshake completo) ─
                 if (!_handshakeDone) return;
 
                 if (json.Contains("\"type\":\"CHAT\""))
                 {
-                    // Usar JsonUtility para parsear correctamente (fix Base64 truncado)
                     ChatMsg msg = JsonUtility.FromJson<ChatMsg>(json);
 
                     string sender  = msg.username ?? "";
@@ -154,8 +145,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
                     string ftype   = msg.file_type ?? "text";
                     bool   isMine  = sender == _username;
 
-                    // Filtrar mensajes propios: ya creamos la burbuja al enviar,
-                    // el servidor hace broadcast a todos incluyendo al emisor
                     if (isMine)
                     {
                         Debug.Log("[UI-TCP] Mensaje propio recibido del servidor (ignorado, ya se mostro)");
@@ -202,8 +191,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
         });
     }
 
-    // ── Enviar texto ──────────────────────────────────────────
-
     public void SendTextMessage()
     {
         if (!_client.isConnected)   { Debug.LogWarning("No conectado"); return; }
@@ -221,8 +208,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
         ShowTextBubble($"Tu: {text}", true);
         ScrollToBottom();
     }
-
-    // ── Enviar imagen ─────────────────────────────────────────
 
     void SendImage()
     {
@@ -248,8 +233,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
         ScrollToBottom();
     }
 
-    // ── Enviar PDF ────────────────────────────────────────────
-
     void SendPdf()
     {
         if (!_client.isConnected || !_handshakeDone) return;
@@ -273,8 +256,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
         ShowFileBubble("Tu", fname, base64, true);
         ScrollToBottom();
     }
-
-    // ── Burbujas ──────────────────────────────────────────────
 
     void ShowTextBubble(string text, bool isMine)
     {
@@ -325,8 +306,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
             var go  = Instantiate(prefab, contentParent);
             ResetRectTransform(go);
 
-            // Buscar el Image para la foto (ignorar el fondo del prefab)
-            // Intentar primero por nombre "PhotoImage", si no existe usar GetComponentInChildren
             var photoTransform = go.transform.Find("PhotoImage");
             Image img = photoTransform != null
                 ? photoTransform.GetComponent<Image>()
@@ -383,10 +362,6 @@ public class UI_TCPClient_GCP : MonoBehaviour
         ScrollToBottom();
     }
 
-    /// <summary>
-    /// Resetea posición/escala del RectTransform para que la burbuja
-    /// aparezca correctamente dentro del Content del ScrollView.
-    /// </summary>
     void ResetRectTransform(GameObject go)
     {
         go.SetActive(true);

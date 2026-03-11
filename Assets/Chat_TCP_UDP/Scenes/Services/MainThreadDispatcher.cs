@@ -2,15 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using UnityEngine;
 
-/// <summary>
-/// Los callbacks de red llegan en hilos de background.
-/// Unity solo permite modificar objetos (UI, Transforms, etc.)
-/// desde el hilo principal. Este componente actúa como puente:
-/// encola acciones y las ejecuta en el Update del hilo principal.
-///
-/// Se crea automáticamente al iniciar la aplicación.
-/// Uso: MainThreadDispatcher.Run(() => miTexto.text = "hola");
-/// </summary>
+
 public class MainThreadDispatcher : MonoBehaviour
 {
     private static MainThreadDispatcher _instance;
@@ -33,10 +25,6 @@ public class MainThreadDispatcher : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Encola una acción para ejecutarse en el próximo Update del hilo principal.
-    /// Seguro llamarlo desde cualquier hilo de red o background.
-    /// </summary>
     public static void Run(Action action)
     {
         _queue.Enqueue(action);

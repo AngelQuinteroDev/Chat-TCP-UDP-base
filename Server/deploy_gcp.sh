@@ -1,11 +1,3 @@
-#!/bin/bash
-# ─────────────────────────────────────────────────────────────────
-#  deploy_gcp.sh
-#  Ejecutar en la VM de GCP después de hacer SSH:
-#    gcloud compute ssh chat-server --zone=us-central1-a
-#    bash deploy_gcp.sh
-# ─────────────────────────────────────────────────────────────────
-
 set -e
 
 echo "=== Instalando .NET 8 ==="
@@ -25,8 +17,7 @@ echo "    gcloud compute scp --recurse ./ChatServer/ chat-server:~/chat-server/ 
 echo ""
 
 echo "=== Compilando el servidor ==="
-# (Ejecutar esto después de copiar los archivos)
-# dotnet build ChatServer.csproj -c Release -o ./publish
+
 
 echo "=== Creando servicio systemd ==="
 sudo tee /etc/systemd/system/chat-server.service > /dev/null <<'EOF'

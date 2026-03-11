@@ -8,24 +8,6 @@ using ChatServer.Models;
 
 namespace ChatServer.Handlers
 {
-    /// <summary>
-    /// Maneja el ciclo de vida completo de un cliente TCP:
-    ///
-    ///  HANDSHAKE
-    ///  ─────────
-    ///  1. Servidor envía  HELLO  (versión, timestamp)
-    ///  2. Cliente responde JOIN  {username, room_id}
-    ///  3. Servidor responde WELCOME {history, users_online}
-    ///
-    ///  CHAT LOOP
-    ///  ─────────
-    ///  • Recibe CHAT (texto / imagen / pdf / audio)
-    ///  • Guarda en BD y hace broadcast a la sala
-    ///  • Responde PONG a los PING de keepalive
-    ///
-    ///  Object Pool: se pide un buffer al pool para cada ReadAsync,
-    ///  y se devuelve al terminar de procesar el fragmento.
-    /// </summary>
     public class TcpClientHandler
     {
         private readonly TcpClient _client;
@@ -52,11 +34,9 @@ namespace ChatServer.Handlers
 
             try
             {
-                // ── PASO 1: Enviar HELLO ─────────────────────────
                 await SendAsync(ChatMessage.MakeHello());
                 Console.WriteLine($"[TCP] HELLO → {_remoteAddr}");
 
-                // ── PASO 2: Esperar JOIN ─────────────────────────
                 string joinRaw = await _reader.ReadLineAsync()
                     .WaitAsync(TimeSpan.FromSeconds(15));
 
@@ -83,14 +63,12 @@ namespace ChatServer.Handlers
                     return;
                 }
 
-                // ── PASO 3: Validar/crear sala ───────────────────
                 if (!ChatDatabase.RoomExists(roomId))
                     ChatDatabase.CreateRoom(roomId, roomId);
 
                 _room = _rooms.GetOrAdd(roomId, id => new ChatRoom(id));
                 _room.AddTcpClient(_username, _writer);
 
-                // ── PASO 4: Enviar WELCOME + historial ───────────
                 var history = ChatDatabase.GetHistory(roomId, 50);
                 await SendAsync(new ChatMessage
                 {
@@ -101,7 +79,6 @@ namespace ChatServer.Handlers
                     UsersOnline = _room.GetOnlineUsers().ToArray()
                 });
 
-                // Notificar entrada al resto
                 await _room.BroadcastTcpAsync(new ChatMessage
                 {
                     Type      = MessageType.USER_JOINED.ToString(),
@@ -111,7 +88,6 @@ namespace ChatServer.Handlers
 
                 Console.WriteLine($"[TCP] {_username} → sala '{roomId}'");
 
-                // ── PASO 5: Loop de mensajes ──────────────────────
                 await ChatLoopAsync();
             }
             catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
@@ -132,7 +108,6 @@ namespace ChatServer.Handlers
         {
             while (_client.Connected)
             {
-                // Pedir buffer al pool (Object Pool)
                 byte[] buffer = ByteBufferPool.Shared.Rent();
                 try
                 {
@@ -144,7 +119,6 @@ namespace ChatServer.Handlers
                 }
                 finally
                 {
-                    // SIEMPRE devolver el buffer al pool
                     ByteBufferPool.Shared.Return(buffer);
                 }
             }
@@ -168,7 +142,7 @@ namespace ChatServer.Handlers
                         Content     = msg.Content,
                         FileTypeStr = msg.FileTypeStr,
                         FileName    = msg.FileName,
-                        FileData    = msg.FileData,   // Base64 del archivo
+                        FileData    = msg.FileData,  
                         Timestamp   = ts
                     };
                     await _room.BroadcastTcpAsync(broadcast);
