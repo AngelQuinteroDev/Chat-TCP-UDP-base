@@ -1,9 +1,5 @@
 using System;
 
-/// <summary>
-/// DTO para deserializar los mensajes JSON del servidor con JsonUtility.
-/// Reemplaza el ExtractJson manual que truncaba datos Base64.
-/// </summary>
 [Serializable]
 public class ChatMsg
 {

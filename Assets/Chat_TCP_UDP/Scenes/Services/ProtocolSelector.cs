@@ -4,12 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
-/// <summary>
-/// Flujo correcto del menú principal:
-///   [Nueva Sala] → API crea sala → muestra código → usuario lo comparte
-///   [Unirse]     → usuario escribe código → valida → habilita Conectar
-///   [Conectar]   → elige protocolo → carga escena de chat
-/// </summary>
+
 public class ProtocolSelector : MonoBehaviour
 {
     [Header("Datos del usuario")]
@@ -35,7 +30,6 @@ public class ProtocolSelector : MonoBehaviour
     public string sceneTCP = "Chat_TCP";
     public string sceneUDP = "Chat_UDP";
 
-    // Datos que pasan a la escena de chat
     public static string SelectedUsername  { get; private set; }
     public static string SelectedRoomCode  { get; private set; }
     public static bool   UseTCP            { get; private set; } = true;
@@ -56,7 +50,6 @@ public class ProtocolSelector : MonoBehaviour
         btnUnirse.onClick.AddListener(OnUnirseClicked);
         btnConectar.onClick.AddListener(OnConectarClicked);
 
-        // Conectar deshabilitado hasta que haya sala lista
         btnConectar.interactable = false;
         lblRoomCode.text = "";
         lblStatus.text   = "";
@@ -70,7 +63,6 @@ public class ProtocolSelector : MonoBehaviour
             : "UDP — Rapido, sin garantia de entrega";
     }
 
-    // ── Crear sala nueva ──────────────────────────────────────
 
     async void OnNuevaSalaClicked()
     {
@@ -105,7 +97,6 @@ public class ProtocolSelector : MonoBehaviour
         }
     }
 
-    // ── Unirse con código ─────────────────────────────────────
 
     async void OnUnirseClicked()
     {
@@ -156,7 +147,6 @@ public class ProtocolSelector : MonoBehaviour
         }
     }
 
-    // ── Conectar ──────────────────────────────────────────────
 
     void OnConectarClicked()
     {
@@ -174,13 +164,10 @@ public class ProtocolSelector : MonoBehaviour
         }
 
         SelectedUsername  = username;
-        _sceneChanging    = true;   // Marcar antes de cambiar escena
+        _sceneChanging    = true;   
         SceneManager.LoadScene(UseTCP ? sceneTCP : sceneUDP);
     }
 
-    // ── Helper ────────────────────────────────────────────────
-
-    // Evita tocar UI después de que la escena cambió
     private bool _sceneChanging = false;
 
     void SetButtonsInteractable(bool state)

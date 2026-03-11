@@ -11,8 +11,6 @@ public static class RoomManager
         Timeout = TimeSpan.FromSeconds(10)
     };
 
-    // ── DTOs para JsonUtility ─────────────────────────────────
-
     [Serializable]
     private class CreateRoomRequest
     {
@@ -33,8 +31,6 @@ public static class RoomManager
         public bool   exists;
         public string room_id;
     }
-
-    // ── Métodos públicos ──────────────────────────────────────
 
     public static async Task<string> CreateRoomAsync(string roomName = "Sala")
     {

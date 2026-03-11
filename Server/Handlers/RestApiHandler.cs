@@ -8,16 +8,6 @@ using ChatServer.Database;
 
 namespace ChatServer.Handlers
 {
-    /// <summary>
-    /// Mini API REST sobre HttpListener (sin dependencias externas).
-    ///
-    ///  POST /rooms/create          → crea sala, devuelve {room_id, name}
-    ///  GET  /rooms/{id}/exists     → {exists: true/false}
-    ///  GET  /rooms/{id}/history    → {messages: [...]}
-    ///
-    /// Unity llama esta API antes de conectarse por TCP/UDP para
-    /// crear o validar la sala de chat.
-    /// </summary>
     public class RestApiHandler
     {
         private readonly HttpListener _listener;
@@ -64,7 +54,6 @@ namespace ChatServer.Handlers
 
             try
             {
-                // POST /rooms/create
                 if (method == "POST" && path == "/rooms/create")
                 {
                     using var body = req.InputStream;
@@ -75,7 +64,6 @@ namespace ChatServer.Handlers
                     string roomId  = GenerateCode();
                     string name    = data?.Name ?? "Sala";
 
-                    // Intentar hasta 10 veces si hay colisión de código
                     for (int i = 0; i < 10; i++)
                     {
                         if (ChatDatabase.CreateRoom(roomId, name)) break;
@@ -85,7 +73,6 @@ namespace ChatServer.Handlers
                     await WriteJsonAsync(resp, 200, new { success = true, room_id = roomId, name });
                 }
 
-                // GET /rooms/{id}/exists
                 else if (method == "GET" && path.StartsWith("/rooms/") && path.EndsWith("/exists"))
                 {
                     string roomId = path.Split('/')[2];
@@ -93,7 +80,6 @@ namespace ChatServer.Handlers
                     await WriteJsonAsync(resp, 200, new { exists, room_id = roomId });
                 }
 
-                // GET /rooms/{id}/history?limit=50
                 else if (method == "GET" && path.StartsWith("/rooms/") && path.EndsWith("/history"))
                 {
                     string roomId = path.Split('/')[2];

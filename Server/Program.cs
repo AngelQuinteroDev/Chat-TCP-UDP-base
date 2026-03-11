@@ -10,24 +10,12 @@ using ChatServer.Models;
 
 namespace ChatServer
 {
-    /// <summary>
-    /// Punto de entrada del servidor de chat.
-    ///
-    ///  Puerto 9000 → TCP  (stream persistente + handshake completo)
-    ///  Puerto 9001 → UDP  (datagrama sin estado + handshake liviano)
-    ///  Puerto 5000 → REST (API para crear/validar salas desde Unity)
-    ///
-    /// Todos los handlers comparten el mismo diccionario de salas (_rooms)
-    /// y el mismo pool de buffers (ByteBufferPool.Shared).
-    /// </summary>
     class Program
     {
-        // Puertos (pueden cambiarse por args o variables de entorno)
         private const int TCP_PORT  = 9000;
         private const int UDP_PORT  = 9001;
         private const int REST_PORT = 5000;
 
-        // Salas compartidas entre TCP y UDP
         private static readonly ConcurrentDictionary<string, ChatRoom> Rooms = new();
 
         static async Task Main(string[] args)
@@ -36,12 +24,9 @@ namespace ChatServer
             Console.WriteLine("║     Chat Server  TCP + UDP + REST    ║");
             Console.WriteLine("╚══════════════════════════════════════╝");
 
-            // Inicializar BD
             ChatDatabase.Init("chat.db");
 
             using var cts = new CancellationTokenSource();
-
-            // Cerrar limpiamente con Ctrl+C
             Console.CancelKeyPress += (_, e) =>
             {
                 e.Cancel = true;
@@ -49,7 +34,6 @@ namespace ChatServer
                 cts.Cancel();
             };
 
-            // Lanzar los tres servidores en paralelo
             await Task.WhenAll(
                 RunTcpServerAsync(cts.Token),
                 RunUdpServerAsync(cts.Token),
@@ -59,7 +43,6 @@ namespace ChatServer
             Console.WriteLine("[Main] Servidor detenido.");
         }
 
-        // ── TCP ───────────────────────────────────────────────────
 
         static async Task RunTcpServerAsync(CancellationToken ct)
         {
@@ -74,7 +57,6 @@ namespace ChatServer
                     TcpClient client = await listener.AcceptTcpClientAsync(ct);
                     Console.WriteLine($"[TCP] Nueva conexión: {client.Client.RemoteEndPoint}");
 
-                    // Cada cliente en su propio Task — no bloquea el accept loop
                     _ = Task.Run(async () =>
                     {
                         var handler = new TcpClientHandler(client, Rooms);
@@ -90,7 +72,6 @@ namespace ChatServer
             }
         }
 
-        // ── UDP ───────────────────────────────────────────────────
 
         static async Task RunUdpServerAsync(CancellationToken ct)
         {
@@ -102,7 +83,6 @@ namespace ChatServer
             Console.WriteLine("[UDP] Servidor detenido");
         }
 
-        // ── REST ──────────────────────────────────────────────────
 
         static async Task RunRestApiAsync(CancellationToken ct)
         {

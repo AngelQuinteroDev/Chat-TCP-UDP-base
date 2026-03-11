@@ -10,35 +10,13 @@ using ChatServer.Models;
 
 namespace ChatServer.Handlers
 {
-    /// <summary>
-    /// Servidor UDP centralizado para el chat.
-    ///
-    ///  HANDSHAKE UDP (sin estado nativo)
-    ///  ──────────────────────────────────
-    ///  UDP no tiene conexión persistente como TCP, así que el
-    ///  "handshake" es un intercambio acordado de mensajes:
-    ///
-    ///  1. Cliente envía  CONNECT {username, room_id}
-    ///  2. Servidor guarda el endpoint del cliente, responde CONNECTED + historial
-    ///  3. El servidor ahora sabe a quién reenviar los broadcasts
-    ///
-    ///  OBJECT POOL
-    ///  ───────────
-    ///  Cada datagrama recibido pide un buffer al pool, lo procesa,
-    ///  y lo devuelve. Esto evita alocaciones en el hot-path de red.
-    ///
-    ///  KEEPALIVE UDP
-    ///  ─────────────
-    ///  UDP no detecta desconexiones. Usamos PING/PONG: si un cliente
-    ///  no responde PONG en N segundos, se elimina de la sala.
-    /// </summary>
+
     public class UdpServerHandler
     {
         private readonly UdpClient _server;
         private readonly ConcurrentDictionary<string, ChatRoom> _rooms;
         private readonly CancellationToken _ct;
 
-        // Keepalive: endpoint → último timestamp de actividad
         private readonly ConcurrentDictionary<string, DateTime> _lastSeen = new();
 
         public UdpServerHandler(UdpClient server,
@@ -54,25 +32,23 @@ namespace ChatServer.Handlers
         {
             Console.WriteLine("[UDP] Servidor escuchando...");
 
-            // Keepalive checker en background
+
             _ = Task.Run(KeepAliveLoopAsync, _ct);
 
             while (!_ct.IsCancellationRequested)
             {
-                // Pedir buffer al pool (Object Pool)
+
                 byte[] poolBuffer = ByteBufferPool.Shared.Rent();
                 try
                 {
                     UdpReceiveResult result = await _server.ReceiveAsync();
-                    // Copiar al buffer del pool para procesamiento
+
                     int len = Math.Min(result.Buffer.Length, poolBuffer.Length);
                     Buffer.BlockCopy(result.Buffer, 0, poolBuffer, 0, len);
 
-                    // Actualizar keepalive
                     string endpointKey = result.RemoteEndPoint.ToString();
                     _lastSeen[endpointKey] = DateTime.UtcNow;
 
-                    // Procesar en background para no bloquear el receive
                     byte[] copy = new byte[len];
                     Buffer.BlockCopy(poolBuffer, 0, copy, 0, len);
                     _ = Task.Run(() => HandleDatagramAsync(copy, result.RemoteEndPoint), _ct);
@@ -100,7 +76,6 @@ namespace ChatServer.Handlers
 
             switch (msg.Type)
             {
-                // ── HANDSHAKE ──────────────────────────────────────
                 case var t when t == MessageType.CONNECT.ToString():
                     if (!ChatDatabase.RoomExists(roomId))
                         ChatDatabase.CreateRoom(roomId, roomId);
@@ -129,7 +104,6 @@ namespace ChatServer.Handlers
                     Console.WriteLine($"[UDP] {username} → sala '{roomId}' desde {from}");
                     break;
 
-                // ── CHAT ───────────────────────────────────────────
                 case var t when t == MessageType.CHAT.ToString():
                     if (!_rooms.TryGetValue(roomId, out var chatRoom)) return;
 
@@ -151,12 +125,10 @@ namespace ChatServer.Handlers
                     }, _server);
                     break;
 
-                // ── KEEPALIVE ──────────────────────────────────────
                 case var t when t == MessageType.PING.ToString():
                     await SendAsync(ChatMessage.MakePong(), from);
                     break;
 
-                // ── DESCONEXIÓN VOLUNTARIA ─────────────────────────
                 case var t when t == MessageType.USER_LEFT.ToString():
                     if (_rooms.TryGetValue(roomId, out var leaveRoom))
                     {
@@ -171,11 +143,6 @@ namespace ChatServer.Handlers
                     break;
             }
         }
-
-        /// <summary>
-        /// Keepalive: cada 30 s verifica si algún cliente dejó
-        /// de enviar PING. Si lleva más de 90 s inactivo, se elimina.
-        /// </summary>
         private async Task KeepAliveLoopAsync()
         {
             while (!_ct.IsCancellationRequested)

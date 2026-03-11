@@ -7,20 +7,10 @@ using ChatServer.Models;
 
 namespace ChatServer.Database
 {
-    /// <summary>
-    /// Gestiona la base de datos SQLite:
-    ///   - Tabla rooms  : salas de chat con código único
-    ///   - Tabla messages: historial persistente de mensajes
-    /// 
-    /// Todos los métodos son sincrónicos deliberadamente para
-    /// mantener simplicidad; SQLite es suficientemente rápido
-    /// para el volumen de un chat académico.
-    /// </summary>
     public static class ChatDatabase
     {
         private static string _dbPath;
 
-        // ── Init ──────────────────────────────────────────────────
 
         public static void Init(string dbPath = "chat.db")
         {
@@ -51,9 +41,6 @@ namespace ChatServer.Database
             Console.WriteLine("[DB] Inicializada en: " + Path.GetFullPath(dbPath));
         }
 
-        // ── Salas ─────────────────────────────────────────────────
-
-        /// <summary>Crea una sala. Retorna true si se creó, false si ya existía.</summary>
         public static bool CreateRoom(string roomId, string name)
         {
             using var conn = GetConn();
@@ -75,7 +62,6 @@ namespace ChatServer.Database
             }
         }
 
-        /// <summary>Verifica si existe una sala con ese ID.</summary>
         public static bool RoomExists(string roomId)
         {
             using var conn = GetConn();
@@ -86,9 +72,7 @@ namespace ChatServer.Database
             return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
         }
 
-        // ── Mensajes ──────────────────────────────────────────────
 
-        /// <summary>Guarda un mensaje en la BD y retorna el timestamp ISO.</summary>
         public static string SaveMessage(
             string roomId, string sender,
             string content, string fileType = "text",
@@ -111,7 +95,7 @@ namespace ChatServer.Database
             return ts;
         }
 
-        /// <summary>Devuelve los últimos N mensajes de una sala en orden cronológico.</summary>
+
         public static List<HistoryEntry> GetHistory(string roomId, int limit = 50)
         {
             using var conn = GetConn();
@@ -140,11 +124,9 @@ namespace ChatServer.Database
                 });
             }
 
-            entries.Reverse(); // Cronológico ascendente
+            entries.Reverse(); 
             return entries;
         }
-
-        // ── Util ─────────────────────────────────────────────────
 
         private static SqliteConnection GetConn()
             => new SqliteConnection($"Data Source={_dbPath}");

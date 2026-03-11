@@ -9,18 +9,13 @@ using ChatServer.Models;
 
 namespace ChatServer.Models
 {
-    /// <summary>
-    /// Agrupa a los clientes que pertenecen a la misma sala de chat.
-    /// Soporta clientes TCP (stream persistente) y UDP (endpoint sin estado).
-    /// </summary>
     public class ChatRoom
     {
         public string RoomId { get; }
 
-        // TCP: username → StreamWriter del cliente
         private readonly ConcurrentDictionary<string, StreamWriter> _tcpClients = new();
 
-        // UDP: username → endpoint del cliente
+
         private readonly ConcurrentDictionary<string, IPEndPoint> _udpClients = new();
 
         public ChatRoom(string roomId)
@@ -28,7 +23,6 @@ namespace ChatServer.Models
             RoomId = roomId;
         }
 
-        // ── TCP ──────────────────────────────────────────────────
 
         public void AddTcpClient(string username, StreamWriter writer)
             => _tcpClients[username] = writer;
@@ -44,7 +38,6 @@ namespace ChatServer.Models
             return users;
         }
 
-        /// <summary>Envía a todos los clientes TCP de la sala (excepto exclude).</summary>
         public async Task BroadcastTcpAsync(ChatMessage msg, string exclude = null)
         {
             string json = msg.ToJson() + "\n";
@@ -62,15 +55,12 @@ namespace ChatServer.Models
             }
         }
 
-        // ── UDP ──────────────────────────────────────────────────
-
         public void AddUdpClient(string username, IPEndPoint endpoint)
             => _udpClients[username] = endpoint;
 
         public void RemoveUdpClient(string username)
             => _udpClients.TryRemove(username, out _);
 
-        /// <summary>Envía a todos los clientes UDP de la sala (excepto excludeEndpoint).</summary>
         public async Task BroadcastUdpAsync(ChatMessage msg, System.Net.Sockets.UdpClient server,
                                              IPEndPoint exclude = null)
         {

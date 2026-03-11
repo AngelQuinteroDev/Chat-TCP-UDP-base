@@ -1,116 +1,35 @@
-# Montar el servidor de chat en Google Cloud (GCP)
+# Servidor Centralizado en Google Cloud Platform (GCP)
 
-Guía para tener un servidor intermediario en GCP al que se conecten los ejecutables de Unity (arquitectura cliente–servidor) usando TCP y UDP.
-
----
-
-## 1. Opciones de cómputo en GCP
-
-| Opción | Uso típico | Ventaja | Coste |
-|--------|------------|---------|--------|
-| **Compute Engine (VM)** | Servidor que escucha TCP/UDP (y opcionalmente HTTP) | Control total, puertos TCP/UDP abiertos | Por hora de VM (e2-micro suele estar en free tier) |
-| **Cloud Run** | Solo HTTP/HTTPS (REST, WebSockets sobre HTTP) | Sin gestión de servidor, escalado a cero | Por request y tiempo de CPU |
-| **App Engine** | Igual que Cloud Run, más antiguo | Similar | Similar |
-
-Para un chat con **TCP y UDP puros** (como pide la rúbrica), necesitas un **proceso que abra sockets**. Eso implica **Compute Engine** (una máquina virtual) o un contenedor en GKE. La opción más directa es **Compute Engine**.
+Para este proyecto, se requería una intermediación confiable entre los clientes de Unity para resolver las clásicas limitaciones de red en los entornos P2P modernos (CGNAT, Firewalls, Port Forwarding). La solución consistió en desarrollar un servidor independiente en C# (.NET 8) y desplegarlo en una Máquina Virtual de GCP. 
 
 ---
 
-## 2. Pasos generales en GCP
+## 1. La Elección de la Infraestructura en la Nube
 
-### 2.1 Proyecto
+Optamos por utilizar **Google Compute Engine (VM)** sobre opciones "Serverless" como Cloud Run (pensado solo para HTTP).
+La razón principal es el requisito del proyecto de soportar tanto el protocolo **TCP** como **UDP** de forma cruda, manteniendo Sockets abiertos permanentemente para la mensajería en tiempo real. Esto requiere control total sobre el sistema operativo base para abrir los puertos en el Firewall y atar (bind) nuestros Listeners a ellos.
 
-- Ya tienes el proyecto creado en GCP. Anota el **ID del proyecto**.
-
-### 2.2 Crear una VM (Compute Engine)
-
-1. En la consola: **Compute Engine → VM instances → Create instance**.
-2. Configuración sugerida para desarrollo/pruebas:
-   - **Name**: `chat-server`.
-   - **Region**: una cercana a tus usuarios (ej. `us-central1`).
-   - **Machine type**: `e2-micro` (1 vCPU, 1 GB RAM; suele entrar en free tier).
-   - **Boot disk**: Ubuntu 22.04 LTS.
-   - **Firewall**: marcar **Allow HTTP traffic** y **Allow HTTPS traffic** si vas a exponer API REST; para solo TCP/UDP no es obligatorio.
-
-3. Crear la VM. Anota la **IP externa** (ej. `34.x.x.x`).
-
-### 2.3 Reglas de firewall para TCP y UDP
-
-Por defecto, GCP no abre puertos arbitrarios. Hay que crear reglas:
-
-1. **VPC network → Firewall → Create firewall rule**.
-2. Regla 1 – TCP (ej. puerto 5555):
-   - **Name**: `allow-chat-tcp`.
-   - **Direction**: Ingress.
-   - **Targets**: All instances (o la etiqueta de tu VM).
-   - **Source IP ranges**: `0.0.0.0/0` (cualquier IP; en producción restringe si quieres).
-   - **Protocols and ports**: TCP, `5555` (o el puerto que uses).
-3. Regla 2 – UDP (ej. puerto 5556):
-   - **Name**: `allow-chat-udp`.
-   - Mismo criterio; **Protocols and ports**: UDP, `5556`.
-
-Así el servidor en la VM podrá recibir conexiones TCP en 5555 y datagramas UDP en 5556.
+- **Tipo de Máquina:** Utilizamos una instancia `e2-micro` alojada en `us-central1` (aprovechando la capa gratuita de GCP), que provee recursos más que suficientes para enrutar texto ligero e imágenes comprimidas entre las salas interactivas.
+- **Sistema Operativo:** Ubuntu 22.04 LTS (Facilita correr cargas de trabajo generadas por el CLI de dotnet).
 
 ---
 
-## 3. Servidor en la VM: opciones de tecnología
+## 2. Puertos Expuestos y Firewalls (Reglas Ingress)
 
-El servidor debe:
+Para que el servidor C# (`Server/Program.cs`) intercepte correctamente a Unity, la consola de VPC Network de GCP fue configurada para permitir tráfico externo hacia tres puertos clave:
 
-- Escuchar en un puerto **TCP** (ej. 5555) y en un puerto **UDP** (ej. 5556).
-- Gestionar salas (crear sala → código; unirse por código).
-- Hacer handshake (primer mensaje con roomCode/protocol).
-- Recibir mensajes de un cliente y reenviarlos a los demás de la misma sala (relay).
-
-Puedes implementarlo en:
-
-- **Node.js** (net + dgram) o **Python** (asyncio + sockets) o **C#** (.NET Core con TcpListener y UdpClient). C# tiene la ventaja de reutilizar lógica y formatos similares a Unity.
-
-### 3.1 Ejemplo de diseño (sin código completo)
-
-- **TCP**: un `TcpListener` acepta clientes; por cada cliente, un hilo o tarea que lee mensajes (por ejemplo líneas de texto o JSON por línea). Al recibir un mensaje, parseas `roomCode`/`userId` y reenvías a todos los clientes de esa sala (manteniendo una estructura `Dictionary<string, List<TcpClient>>` por roomCode).
-- **UDP**: un `UdpClient` recibe datagramas; cada datagrama incluye en el payload (por ejemplo primer mensaje) el roomCode y un userId; guardas `IPEndPoint` por sala y usuario. Cuando llega un mensaje, reenvías a los demás endpoints de la misma sala.
-
-Formato de mensaje sugerido (ejemplo):
-
-```json
-{ "type": "join", "roomCode": "ABC-1234", "userId": "user1" }
-{ "type": "message", "text": "Hola", "messageId": "..." }
-{ "type": "file", "filename": "doc.pdf", "contentBase64": "..." }
-```
-
-El servidor puede generar el `roomCode` al crear sala (endpoint HTTP opcional o comando especial en el primer mensaje TCP/UDP).
-
-### 3.2 Desplegar el servidor en la VM
-
-1. Conectar por SSH a la VM (desde la consola de GCP o `gcloud compute ssh chat-server --zone=...`).
-2. Instalar runtime (Node, Python o .NET según tu servidor).
-3. Subir el código (git clone, o subir por SCP/SFTP).
-4. Ejecutar el servidor (por ejemplo `node server.js` o `python server.py` o `dotnet run`).
-5. Para que siga corriendo al cerrar SSH: usar **systemd** o **screen**/ **tmux**:
-   - systemd: crear un unit file que ejecute tu binario y hacer `systemctl enable --now chat-server`.
+1. **REST API (Puerto 5000):** Protocolo `HTTP/TCP`. Este puerto es el primer punto de contacto de Unity para solicitar el alta de una sala nueva, o verificar que una cadena de `room_id` concuerde con una sala guardada en el diccionario de RAM de la máquina virtual.
+2. **Servidor TCP (Puerto 9000):** Protocolo `TCP`. Unity abre un socket persistente contra la IP pública usando `TcpClient`. Este canal está restringido exclusivamente a las comunicaciones de chat ordenadas.
+3. **Servidor UDP (Puerto 9001):** Protocolo `UDP`. Unity envía al instante datagramas en bloque a través de este puerto usando `UdpClient`, y el servidor los dispara a sus oyentes al instante simulando una comunicación ultra-rápida.
 
 ---
 
-## 4. Cómo se conecta Unity al servidor
+## 3. Despliegue (Deploy) de la Solución
 
-- **Dirección**: la **IP pública** de la VM (o un dominio apuntando a esa IP).
-- **Puertos**: el mismo que abriste en el firewall (ej. TCP 5555, UDP 5556).
-- En Unity:
-  - Para **TCP**: igual que en tu base, pero en lugar de conectar a la IP del “otro jugador”, conectas a la IP de la VM y el puerto TCP. El primer mensaje que envías debe ser el handshake (join con roomCode).
-  - Para **UDP**: igual: `remoteEndPoint` = IP de la VM + puerto UDP; primer datagrama = handshake con roomCode.
+El repositorio incluye un proyecto C# completo apartado de Unity en el directorio `/Server`.
 
-No hace falta “API REST” para el chat en tiempo real si usas TCP/UDP; la “API” es tu protocolo de mensajes (JSON por línea o por datagrama). Opcionalmente puedes exponer HTTP en otro puerto (ej. 8080) solo para “crear sala” (POST) y “unirse” (POST) y devolver el roomCode; el chat en sí seguiría por TCP/UDP.
+El comando base que arranca este servicio de escucha se encapsula típicamente en `dotnet run`, pero en un servidor Cloud de producción necesitamos que este aplicativo ".NET" se reinicie solo si falla o si la VM se reinicia. 
 
----
-
-## 5. Resumen de pasos
-
-1. Crear VM en Compute Engine (Ubuntu).
-2. Anotar IP pública.
-3. Crear reglas de firewall: TCP 5555, UDP 5556 (y 80/443 si usas HTTP).
-4. Implementar servidor que escuche en 5555 (TCP) y 5556 (UDP), gestione salas y relay.
-5. Desplegar en la VM y dejarlo corriendo (systemd/tmux).
-6. En Unity: configurar IP y puertos (por defecto o en UI) y conectar a esa IP/puerto con el protocolo elegido (TCP o UDP).
-
-Para documentación del proyecto y README según la rúbrica, ver **README.md** en la raíz del repositorio.
+Para lograrlo, el proyecto incluyó el script `deploy_gcp.sh`:
+- Este archivo compilado (Release) registra nuestro ejecutable de Chat Server como un servicio oficial del Sistema (Daemon de `systemd`) de Linux.
+- Por ende, actualmente en la nube basta con encender la VM de GCP asignada, y el servicio de chat arranca pasivamente en segundo plano, esperando los Handshakes enviados desde el Menú Principal y los Sockets de nuestra interfaz de Unity.
