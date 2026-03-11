@@ -35,6 +35,8 @@ public class UI_UDPClient_GCP : MonoBehaviour
     private string  _roomId;
     private bool    _handshakeDone = false;
     private bool    _sceneChanging  = false; 
+    private UdpChunkSender   _chunkSender;
+    private UdpChunkReceiver _chunkReceiver;
 
     public void GoToProtocolScene()
     {
@@ -75,6 +77,10 @@ public class UI_UDPClient_GCP : MonoBehaviour
         clientReference.connectUsername = _username;
         clientReference.connectRoomId   = _roomId;
         _client.ConnectToServer(GCPConfig.SERVER_IP, GCPConfig.UDP_PORT);
+
+        _chunkSender   = new UdpChunkSender(_client, _username, _roomId);
+        _chunkReceiver = new UdpChunkReceiver();
+        _chunkReceiver.OnFileComplete += HandleFileComplete;
     }
 
 
@@ -98,6 +104,12 @@ public class UI_UDPClient_GCP : MonoBehaviour
             {
                 if (_sceneChanging) return;
                 if (!_handshakeDone) return;
+
+                if (json.Contains("\"type\":\"CHUNK\""))
+                {
+                    _chunkReceiver.HandleChunk(json);
+                    return;
+                }
 
                 if (json.Contains("\"type\":\"CHAT\""))
                 {
@@ -152,53 +164,65 @@ public class UI_UDPClient_GCP : MonoBehaviour
         ScrollToBottom();
     }
 
-    void SendImage()
-    {
-        if (!_client.isConnected || !_handshakeDone) return;
+async void SendImage()
+{
+    if (!_client.isConnected || !_handshakeDone) return;
 #if UNITY_EDITOR
-        string path = UnityEditor.EditorUtility.OpenFilePanel("Seleccionar imagen", "", "png,jpg,jpeg");
+    string path = UnityEditor.EditorUtility.OpenFilePanel("Seleccionar imagen", "", "png,jpg,jpeg");
 #else
-        string path = null;
+    string path = null;
 #endif
-        if (string.IsNullOrEmpty(path)) return;
+    if (string.IsNullOrEmpty(path)) return;
 
-        byte[] bytes  = File.ReadAllBytes(path);
-        string base64 = Convert.ToBase64String(bytes);
-        string fname  = Path.GetFileName(path);
+    byte[] bytes = File.ReadAllBytes(path);
+    string fname = Path.GetFileName(path);
 
-        string json = $"{{\"type\":\"CHAT\",\"username\":\"{_username}\"," +
-                      $"\"room_id\":\"{_roomId}\",\"content\":\"{fname}\"," +
-                      $"\"file_type\":\"image\",\"file_name\":\"{fname}\"," +
-                      $"\"file_data\":\"{base64}\"}}";
+    ShowImageBubble("Tu", Convert.ToBase64String(bytes), true);
+    ScrollToBottom();
 
-        _client.SendMessageAsync(json);
-        ShowImageBubble("Tu", base64, true);
-        ScrollToBottom();
-    }
+    if (btnSendImage) btnSendImage.interactable = false;
+    await _chunkSender.SendFileAsync(bytes, fname, "image",
+        progress => MainThreadDispatcher.Run(() => {
+            if (!_sceneChanging && lblStatus)
+                lblStatus.text = $"Enviando... {(int)(progress * 100)}%";
+        }));
 
-    void SendPdf()
+    if (!_sceneChanging)
     {
-        if (!_client.isConnected || !_handshakeDone) return;
-#if UNITY_EDITOR
-        string path = UnityEditor.EditorUtility.OpenFilePanel("Seleccionar PDF", "", "pdf");
-#else
-        string path = null;
-#endif
-        if (string.IsNullOrEmpty(path)) return;
-
-        byte[] bytes  = File.ReadAllBytes(path);
-        string base64 = Convert.ToBase64String(bytes);
-        string fname  = Path.GetFileName(path);
-
-        string json = $"{{\"type\":\"CHAT\",\"username\":\"{_username}\"," +
-                      $"\"room_id\":\"{_roomId}\",\"content\":\"{fname}\"," +
-                      $"\"file_type\":\"pdf\",\"file_name\":\"{fname}\"," +
-                      $"\"file_data\":\"{base64}\"}}";
-
-        _client.SendMessageAsync(json);
-        ShowFileBubble("Tu", fname, base64, true);
-        ScrollToBottom();
+        if (lblStatus)    lblStatus.text = "Conectado";
+        if (btnSendImage) btnSendImage.interactable = true;
     }
+}
+
+async void SendPdf()
+{
+    if (!_client.isConnected || !_handshakeDone) return;
+#if UNITY_EDITOR
+    string path = UnityEditor.EditorUtility.OpenFilePanel("Seleccionar PDF", "", "pdf");
+#else
+    string path = null;
+#endif
+    if (string.IsNullOrEmpty(path)) return;
+
+    byte[] bytes = File.ReadAllBytes(path);
+    string fname = Path.GetFileName(path);
+
+    ShowFileBubble("Tu", fname, Convert.ToBase64String(bytes), true);
+    ScrollToBottom();
+
+    if (btnSendPdf) btnSendPdf.interactable = false;
+    await _chunkSender.SendFileAsync(bytes, fname, "pdf",
+        progress => MainThreadDispatcher.Run(() => {
+            if (!_sceneChanging && lblStatus)
+                lblStatus.text = $"Enviando... {(int)(progress * 100)}%";
+        }));
+
+    if (!_sceneChanging)
+    {
+        if (lblStatus)  lblStatus.text = "Conectado";
+        if (btnSendPdf) btnSendPdf.interactable = true;
+    }
+}
 
     void ShowTextBubble(string text, bool isMine)
     {
@@ -266,6 +290,24 @@ public class UI_UDPClient_GCP : MonoBehaviour
         Canvas.ForceUpdateCanvases();
         scrollView.verticalNormalizedPosition = 0f;
     }
+
+    void HandleFileComplete(UdpChunkReceiver.ChunkMeta meta, byte[] bytes)
+{
+    MainThreadDispatcher.Run(() =>
+    {
+        if (_sceneChanging) return;
+        if (meta.Username == _username) return; 
+
+        string base64 = Convert.ToBase64String(bytes);
+
+        if (meta.FileType == "image")
+            ShowImageBubble(meta.Username, base64, false);
+        else
+            ShowFileBubble(meta.Username, meta.FileName, base64, false);
+
+        ScrollToBottom();
+    });
+}
 
     static string ExtractJson(string json, string key)
     {
