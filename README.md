@@ -1,76 +1,60 @@
-# Chat TCP/UDP - Aplicación de chat multiplataforma
+# Chat TCP/UDP - Arquitectura Cliente-Servidor en GCP
 
 [![Unity](https://img.shields.io/badge/Unity-2022+-black?style=flat-square&logo=unity)](https://unity.com)
+[![GCP](https://img.shields.io/badge/Google_Cloud-4285F4?style=flat-square&logo=google-cloud&logoColor=white)](https://cloud.google.com/)
 [![TCP](https://img.shields.io/badge/Protocol-TCP-blue?style=flat-square)](https://es.wikipedia.org/wiki/Protocolo_de_control_de_transmisi%C3%B3n)
 [![UDP](https://img.shields.io/badge/Protocol-UDP-green?style=flat-square)](https://es.wikipedia.org/wiki/Protocolo_de_datagramas_de_usuario)
 
-Aplicación de chat desarrollada a partir del [fork de la base Chat-TCP-UDP](https://github.com/memin2522/Chat-TCP-UDP-base). Permite comunicación bidireccional mediante **TCP** o **UDP**, con soporte para mensajes de texto, imágenes y otros tipos de archivo.
+Aplicación de chat desarrollada a partir del [fork de la base Chat-TCP-UDP](https://github.com/memin2522/Chat-TCP-UDP-base). Esta versión ha sido fuertemente modificada para evolucionar de una arquitectura **Peer-to-Peer (P2P)** a una arquitectura **Cliente-Servidor dedicada** alojada en **Google Cloud Platform (GCP)**.
+
+Permite comunicación fluida en tiempo real (texto, imágenes y archivos PDF/Audio) organizando a los usuarios en **salas interactivas**, utilizando los protocolos TCP o UDP.
 
 ---
 
 ## Tabla de contenidos
 
 - [Acerca del proyecto](#acerca-del-proyecto)
-- [Requisitos funcionales (rúbrica)](#requisitos-funcionales-rúbrica)
-- [Construido con](#construido-con)
+- [Arquitectura Actual (GCP)](#arquitectura-actual-gcp)
+- [Características Principales](#características-principales)
 - [Empezar](#empezar)
   - [Prerrequisitos](#prerrequisitos)
   - [Instalación](#instalación)
   - [Uso](#uso)
-- [Estructura del proyecto](#estructura-del-proyecto)
-- [Documentación adicional](#documentación-adicional)
-- [Entregables y criterios de evaluación](#entregables-y-criterios-de-evaluación)
-- [Roadmap](#roadmap)
+- [Estructura del Proyecto](#estructura-del-proyecto)
+- [Documentación Adicional](#documentación-adicional)
 - [Contacto](#contacto)
-- [Agradecimientos](#agradecimientos)
 
 ---
 
 ## Acerca del proyecto
 
-Este proyecto extiende la base de chat TCP/UDP para cumplir con la actividad de Servicios Multimedia (Primer Corte). La aplicación permite:
+Este proyecto fue modificado para la actividad de Servicios Multimedia. La aplicación permite a los clientes conectarse a un servidor dedicado alojado en GCP. Los usuarios pueden crear salas, compartir el código de la sala con otros, y chatear usando el protocolo de su preferencia (TCP o UDP).
 
-- **Seleccionar el protocolo** (TCP o UDP) **antes** de establecer la conexión.
-- Comunicación **bidireccional** entre dos usuarios.
-- Envío y recepción de:
-  - **Mensajes de texto**
-  - **Imágenes** (con visualización dentro del chat)
-  - **Al menos un tipo adicional de archivo** (.pdf, audio o ejecutable)
+La interfaz gráfica (UI) ha sido refactorizada para incluir menús de unificación donde el usuario:
+1. Especifica su nombre.
+2. Crea una nueva sala o ingresa un código para unirse a una existente.
+3. Elige el protocolo de comunicación (TCP o UDP) de manera explícita antes de conectar.
 
-La interfaz muestra de forma clara los mensajes enviados y recibidos, así como la recepción de archivos.
+## Arquitectura Actual (GCP)
 
-*(Incluir aquí capturas de pantalla en formato .png de las interfaces, por ejemplo en una carpeta `images/`.)*
+A diferencia de la versión original (que era P2P y requería que un usuario alojara el servidor localmente en una escena separada), este proyecto implementa un servidor centralizado en C# (.NET) en una Máquina Virtual de GCP. 
 
-<!-- Ejemplo:
-![Pantalla principal](images/main.png)
-![Chat TCP](images/chat-tcp.png)
-![Chat UDP](images/chat-udp.png)
--->
+- **API REST (Puerto 5000)**: Proporciona endpoints para la gestión de salas (creación y verificación de existencia de salas). El script `RoomManager.cs` maneja las solicitudes HTTP desde Unity.
+- **Servidor TCP (Puerto 9000)**: Gestiona las conexiones TCP persistentes, el handshake de unión a las salas y el envío/recepción de datos de manera confiable y ordenada.
+- **Servidor UDP (Puerto 9001)**: Gestiona las conexiones UDP para aquellos clientes que eligen una comunicación más rápida sin garantía de entrega.
 
----
+En Unity, la conexión al servidor está centralizada de forma sencilla en el archivo `GCPconfig.cs`.
 
-## Requisitos funcionales (rúbrica)
+## Características Principales
 
-| Requisito | Estado |
-|-----------|--------|
-| Selección explícita de protocolo (TCP/UDP) antes de conectar | Pendiente / Implementado |
-| Funcionamiento correcto con TCP | Pendiente / Implementado |
-| Funcionamiento correcto con UDP | Pendiente / Implementado |
-| UI: visualización clara de mensajes enviados y recibidos | Pendiente / Implementado |
-| Comunicación bidireccional | Pendiente / Implementado |
-| Envío y recepción de texto | Pendiente / Implementado |
-| Envío y recepción de imágenes (visualización en chat) | Pendiente / Implementado |
-| Envío y recepción de al menos un tipo extra (.pdf, audio o ejecutable) | Pendiente / Implementado |
-| Evidencia en interfaz de llegada de mensajes y recepción de archivos | Pendiente / Implementado |
-
----
-
-## Construido con
-
-- [Unity](https://unity.com) (2022 o superior)
-- [TextMesh Pro](https://unity.com/unity/features/2d/fonts-and-text/textmesh-pro) (texto en UI)
-- C# / .NET (sockets TCP y UDP)
-- *(Opcional: servidor en GCP para arquitectura cliente–servidor con salas)*
+- **Arquitectura Cliente-Servidor Dedicada**: Eliminadas las complicaciones de P2P y reenvío de puertos por parte del cliente final. El servidor en GCP centraliza todo.
+- **Salas (Rooms)**: Generación dinámica del código de sala a través de la API REST para aislar diferentes sesiones de chat simultáneas.
+- **Selección de Protocolo**: El usuario puede elegir entre enviar sus mensajes mediante **TCP** (confiable) o **UDP** (rápido).
+- **Tipos de Mensajes Soportados**:
+  - Mensajes de Texto.
+  - Imágenes (Visualizadas directamente en los globos de chat).
+  - Archivos adicionales (Ej. PDF) descargables en el dispositivo local.
+- **Interfaz Renovada**: Escenas actualizadas en `GCP_UI` con prefab de burbujas ajustables, scroll views y notificaciones del sistema separadas.
 
 ---
 
@@ -78,97 +62,79 @@ La interfaz muestra de forma clara los mensajes enviados y recibidos, así como 
 
 ### Prerrequisitos
 
-- Unity Hub con Unity 2022 LTS o superior.
-- *(Si usas servidor en GCP: IP y puertos del servidor configurados en el cliente.)*
+- Unity Hub con **Unity 6000.3.8f1** o superior.
+- Conexión a Internet activa (para comunicación con el servidor de GCP).
 
 ### Instalación
 
-1. Clonar el repositorio (debe ser **fork** de la base entregada):
-   ```bash
-   git clone https://github.com/TU_USUARIO/Chat-TCP-UDP.git
-   cd Chat-TCP-UDP
-   ```
-2. Abrir el proyecto con Unity Hub (Add → seleccionar esta carpeta).
-3. Abrir la escena correspondiente:
-   - **TCP**: `Assets/Chat_TCP_UDP/Scenes/TCP/Tcp_Server.unity` (servidor) y `Tcp_Client.unity` (cliente).
-   - **UDP**: `Assets/Chat_TCP_UDP/Scenes/UDP/Udp_Server.unity` y `Udp_Client.unity`.
+1. Clonar el repositorio.
+2. Añadir y abrir el proyecto desde **Unity Hub**.
+3. (Opcional) Si decides montar tu propio servidor en lugar de usar la IP por defecto de GCP:
+   - Configura el servidor en una VM abriendo los puertos *5000, 9000 y 9001*.
+   - Edita el archivo `Assets/Chat_TCP_UDP/Scenes/Services/GCPconfig.cs` y coloca la IP pública de tu VM en la constante `SERVER_IP`.
 
 ### Uso
 
-- **Modo servidor**: ejecutar la escena de servidor (TCP o UDP), pulsar el botón para iniciar servidor y anotar la IP y puerto (ej. mostrados en UI o consola).
-- **Modo cliente**: ejecutar la escena de cliente, introducir la IP y puerto del servidor (o del otro ejecutable si es P2P) y conectar.
-- *(Cuando esté implementado: seleccionar primero TCP o UDP en la UI y luego crear sala / unirse con código.)*
+Para probar y usar el chat en su versión actual con GCP:
+1. En Unity, abre la escena del menú principal: `Assets/Chat_TCP_UDP/Scenes/GCP_UI/MainMenu.unity`.
+2. Dale a **Play**.
+3. Introduce tu nombre y dale a **Nueva Sala**.
+4. Copia el código generado (o compártelo a otro cliente).
+5. Selecciona el protocolo deseado (TCP o UDP).
+6. Presiona el botón de **Conectar** (te redigirá a las escenas `Chat_TCP` o `Chat_UDP` en `GCP_UI`).
+
+> **Nota:** Ya no es necesario ejecutar `Tcp_Server` o `Udp_Server` localmente (a menos que desees probar las versiones base/antiguas). Tu cliente se conectará directamente a la VM de GCP.
 
 ---
 
-## Estructura del proyecto
+## Estructura del Proyecto
 
+La estructura del proyecto difiere drásticamente de la versión original ya que incluye scripts y recursos nuevos para gestionar el Client-Server y despliegue del servidor:
+
+```text
+/
+├── Assets/Chat_TCP_UDP/
+│   ├── Scenes/
+│   │   ├── GCP_UI/       # Nuevas escenas con la arquitectura GCP (MainMenu, Chat_TCP, Chat_UDP)
+│   │   ├── Services/     # Scripts de servicios (API REST interact, GCPconfig, UI cliente GCP)
+│   │   ├── TCP/          # [Legacy] Escenas TCP del proyecto en P2P
+│   │   └── UDP/          # [Legacy] Escenas UDP del proyecto en P2P
+│   ├── Scripts/          # Scripts base de conexión (TCPClient, UDPClient y Core network logics)
+├── Server/               # Proyecto en C# (.NET) del servidor central para desplegar en GCP
+│   ├── Database/         # Manejo de persistencia y base de datos (SQLite/JSON)
+│   ├── Handlers/         # Manejadores del Socket y endpoints
+│   ├── Models/           # Modelos de mensajería (JSON schemas) y clases de Room
+│   ├── Program.cs        # Punto de entrada de la API REST y Sockets
+│   └── deploy_gcp.sh     # Script Bash para automatizar el build y despliegue en GCP
+└── docs/                 # Documentación técnica adicional detallada
 ```
-Assets/
-  Chat_TCP_UDP/
-    Scenes/          # Escenas TCP, UDP y Video
-    Scripts/         # Lógica de red e interfaces
-      Interface/     # IChatConnection, IServer, IClient
-      TCP/           # TCPServer, TCPClient, UI
-      UDP/           # UDPServer, UDPClient, UI
-      VIdeo/         # Video por UDP (sender/receiver)
-docs/                # Documentación en Markdown
-  ARQUITECTURA-Y-REQUISITOS.md
-  COMUNICACION-TIEMPO-REAL.md   # Polling, handshake, WebSockets, TCP/UDP
-  HISTORIAL-Y-PERSISTENCIA.md   # Cómo guardar mensajes e historial
-  GCP-SERVIDOR.md               # Montar servidor en GCP
-```
+
+### Carpetas Principales Modificadas/Creadas:
+- **`Scenes/GCP_UI`**: Contiene la iteración final (Menú principal y salas de chat TCP y UDP unificadas al cliente).
+- **`Scenes/Services`**: Aquí reside el puente de comunicación entre Unity y la lógica del servidor GCP. Implementa `HttpClient` para REST, serialización JSON robusta (ChatMsg) y dispatch handlers al hilo principal.
+- **`Server`**: Contiene todo el código .NET (ASP.NET Core Minimal API / Sockets) para construir y correr el Chat Server independiente de Unity directamente en Linux/Windows.
 
 ---
 
 ## Documentación adicional
 
-Toda la documentación en formato Markdown está en la carpeta `docs/`:
+Toda la documentación en formato Markdown está en la carpeta `docs/`. Estos documentos explican las ideas fundacionales de diseño:
 
 | Documento | Contenido |
 |-----------|-----------|
-| [ARQUITECTURA-Y-REQUISITOS.md](docs/ARQUITECTURA-Y-REQUISITOS.md) | Rúbrica, idea de salas con código, arquitecturas (P2P vs cliente–servidor). |
-| [COMUNICACION-TIEMPO-REAL.md](docs/COMUNICACION-TIEMPO-REAL.md) | Handshake, polling, long polling, WebSockets, y cómo encajan con TCP/UDP. |
-| [HISTORIAL-Y-PERSISTENCIA.md](docs/HISTORIAL-Y-PERSISTENCIA.md) | Dónde y cómo guardar mensajes e historial (cliente, servidor, DB). |
-| [GCP-SERVIDOR.md](docs/GCP-SERVIDOR.md) | Pasos para montar el servidor intermediario en Google Cloud (VM, firewall, TCP/UDP). |
-
----
-
-## Entregables y criterios de evaluación
-
-- **Repositorio en GitHub**: fork de la base, con código fuente y documentación en `.md`.
-- **Video en YouTube** mostrando:
-  - Funcionamiento con TCP.
-  - Funcionamiento con UDP.
-  - Envío de imagen.
-  - Envío de otro tipo de archivo (.pdf, audio o ejecutable).
-- **Imágenes de las interfaces** en formato `.png` (incluir en el repo o en la documentación).
-
-*(Enlace al video y a las capturas se añadirán aquí al entregar.)*
-
----
-
-## Roadmap
-
-- [ ] UI única con selector TCP/UDP antes de conectar.
-- [ ] Visualización en chat de mensajes enviados/recibidos (lista/scroll).
-- [ ] Envío y visualización de imágenes en el chat.
-- [ ] Envío y recepción de al menos un tipo extra (.pdf, audio o ejecutable).
-- [ ] *(Opcional)* Servidor en GCP con salas y código de sala.
-- [ ] *(Opcional)* Persistencia de historial (servidor + DB).
+| [ARQUITECTURA-Y-REQUISITOS.md](docs/ARQUITECTURA-Y-REQUISITOS.md) | Idea original y requerimientos del curso. |
+| [COMUNICACION-TIEMPO-REAL.md](docs/COMUNICACION-TIEMPO-REAL.md) | Metodologías web vs UDP/TCP manual. |
+| [HISTORIAL-Y-PERSISTENCIA.md](docs/HISTORIAL-Y-PERSISTENCIA.md) | Teoría sobre el persistido en servidor. |
+| [GCP-SERVIDOR.md](docs/GCP-SERVIDOR.md) | Pasos sobre montaje del servidor en Google Cloud Compute Engine. |
 
 ---
 
 ## Contacto
 
-**Tu nombre / equipo** – [@tu_twitter](https://twitter.com) – tu_email@ejemplo.com  
+**Equipo de Desarrollo**
 
 Link del proyecto: [https://github.com/TU_USUARIO/Chat-TCP-UDP](https://github.com/TU_USUARIO/Chat-TCP-UDP)
 
 ---
 
-## Agradecimientos
-
-- [Chat-TCP-UDP-base](https://github.com/memin2522/Chat-TCP-UDP-base) – Base del proyecto.
-- [Best-README-Template](https://github.com/othneildrew/Best-README-Template) – Plantilla de README.
-- Unity Documentation – TextMesh Pro y Networking.
+> El código base para las interfaces P2P y sockets es el fork original adaptado de [memin2522/Chat-TCP-UDP-base](https://github.com/memin2522/Chat-TCP-UDP-base).
