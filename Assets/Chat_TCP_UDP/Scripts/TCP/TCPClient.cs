@@ -16,6 +16,16 @@ public class TCPClient : MonoBehaviour, IClient
     public event Action OnConnected;
     public event Action OnDisconnected;
 
+    public GameObject bubblePrefab;
+    public Transform messagesContainer;
+
+    public void CreateMessage(string text)
+    {
+        GameObject bubble = Instantiate(bubblePrefab, messagesContainer);
+
+        bubble.GetComponentInChildren<TMPro.TextMeshProUGUI>().text = text;
+    }
+
     public async Task ConnectToServer(string ip, int port)
     {
         tcpClient = new TcpClient(); //Creates a new instance of the TcpClient class
