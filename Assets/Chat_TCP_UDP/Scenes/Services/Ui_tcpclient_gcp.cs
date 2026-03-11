@@ -3,6 +3,7 @@ using System.IO;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 public class UI_TCPClient_GCP : MonoBehaviour
 {
@@ -16,6 +17,7 @@ public class UI_TCPClient_GCP : MonoBehaviour
     public Button         btnSend;
     public Button         btnSendImage;
     public Button         btnSendPdf;
+    public Button         btnBack;
     public TMP_Text       lblRoomCode;
     public TMP_Text       lblProtocol;
     public TMP_Text       lblStatus;
@@ -66,6 +68,8 @@ public class UI_TCPClient_GCP : MonoBehaviour
         if (btnSendImage) btnSendImage.onClick.AddListener(SendImage);
         if (btnSendPdf)   btnSendPdf.onClick.AddListener(SendPdf);
 
+        if (btnBack) btnBack.onClick.AddListener(GoToProtocolScene);
+
         if (lblRoomCode) lblRoomCode.text = $"Sala: {_roomId}";
         if (lblProtocol) lblProtocol.text = "TCP";
         if (lblStatus)   lblStatus.text   = "Conectando...";
@@ -84,6 +88,16 @@ public class UI_TCPClient_GCP : MonoBehaviour
             if (lblStatus) lblStatus.text = $"Error: {ex.Message}";
             Debug.LogError("[UI-TCP] " + ex.Message);
         }
+    }
+
+        public void GoToProtocolScene()
+    {
+        if (_client != null && _client.isConnected)
+        {
+            _client.Disconnect();
+        }
+
+        SceneManager.LoadScene("MainMenu");
     }
 
     // ── Handlers ──────────────────────────────────────────────

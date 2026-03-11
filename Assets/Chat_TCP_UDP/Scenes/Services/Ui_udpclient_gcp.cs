@@ -3,6 +3,7 @@ using System.IO;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 public class UI_UDPClient_GCP : MonoBehaviour
 {
@@ -16,6 +17,7 @@ public class UI_UDPClient_GCP : MonoBehaviour
     public Button         btnSend;
     public Button         btnSendImage;
     public Button         btnSendPdf;
+    public Button btnBack;
     public TMP_Text       lblRoomCode;
     public TMP_Text       lblProtocol;
     public TMP_Text       lblStatus;
@@ -32,6 +34,7 @@ public class UI_UDPClient_GCP : MonoBehaviour
     private string  _username;
     private string  _roomId;
     private bool    _handshakeDone = false;
+    
 
     void Awake()
     {
@@ -58,10 +61,22 @@ public class UI_UDPClient_GCP : MonoBehaviour
         if (btnSendImage) btnSendImage.onClick.AddListener(SendImage);
         if (btnSendPdf)   btnSendPdf.onClick.AddListener(SendPdf);
 
+        if (btnBack) btnBack.onClick.AddListener(GoToProtocolScene);
+
         // Pasar username y roomId al UDPClient para que el CONNECT inicial sea correcto
         clientReference.connectUsername = _username;
         clientReference.connectRoomId   = _roomId;
         _client.ConnectToServer(GCPConfig.SERVER_IP, GCPConfig.UDP_PORT);
+    }
+
+    public void GoToProtocolScene()
+    {
+        if (_client != null && _client.isConnected)
+        {
+            _client.Disconnect();
+        }
+
+        SceneManager.LoadScene("MainMenu");
     }
 
     // ── Handlers ──────────────────────────────────────────────
