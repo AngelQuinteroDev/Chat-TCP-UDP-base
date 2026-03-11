@@ -5,9 +5,18 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
+  - enabled: 0
     path: Assets/Chat_TCP_UDP/Scenes/SampleScene.unity
     guid: 8c9cfa26abfee488c85f1582747f6a02
+  - enabled: 1
+    path: Assets/Chat_TCP_UDP/Scenes/GCP_UI/MainMenu.unity
+    guid: d71b96a658b0fca4a847ea65406d70ba
+  - enabled: 1
+    path: Assets/Chat_TCP_UDP/Scenes/GCP_UI/Chat_TCP.unity
+    guid: 1d8865c6098df0b4a9cea203f9ce09f0
+  - enabled: 1
+    path: Assets/Chat_TCP_UDP/Scenes/GCP_UI/Chat_UDP.unity
+    guid: 21322f2ab08ed334abd55c68ab81a612
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
   m_UseUCBPForAssetBundles: 0

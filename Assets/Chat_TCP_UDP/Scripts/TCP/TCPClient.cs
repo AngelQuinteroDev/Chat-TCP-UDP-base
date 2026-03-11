@@ -16,6 +16,16 @@ public class TCPClient : MonoBehaviour, IClient
     public event Action OnConnected;
     public event Action OnDisconnected;
 
+    public GameObject bubblePrefab;
+    public Transform messagesContainer;
+
+    public void CreateMessage(string text)
+    {
+        GameObject bubble = Instantiate(bubblePrefab, messagesContainer);
+
+        bubble.GetComponentInChildren<TMPro.TextMeshProUGUI>().text = text;
+    }
+
     public async Task ConnectToServer(string ip, int port)
     {
         tcpClient = new TcpClient(); //Creates a new instance of the TcpClient class
@@ -32,7 +42,8 @@ public class TCPClient : MonoBehaviour, IClient
 
     private async Task ReceiveLoop()
     {
-        byte[] buffer = new byte[1024]; // Buffer to store incoming data from the server, 1024 bytes = 1 KB
+        byte[] buffer = new byte[65536]; // Buffer to store incoming data from the server (64 KB to handle large messages like images)
+        System.Text.StringBuilder accumulator = new System.Text.StringBuilder(); // Accumulates partial TCP chunks into complete messages
 
         try
         {
@@ -44,9 +55,23 @@ public class TCPClient : MonoBehaviour, IClient
                     Debug.Log("[Client] Server disconnected");
                     break;
                 }
-                string message = Encoding.UTF8.GetString(buffer, 0, bytesRead);// Converts the received bytes into a string message using UTF-8 encoding
-                OnMessageReceived?.Invoke(message); // Invokes the OnMessageReceived event, passing the received message to any subscribed listeners
-                Debug.Log("[Client] Received from server: " + message);
+                accumulator.Append(Encoding.UTF8.GetString(buffer, 0, bytesRead)); // Append chunk to accumulator
+
+                // Process all complete messages (delimited by \n)
+                string accumulated = accumulator.ToString();
+                int newlineIndex;
+                while ((newlineIndex = accumulated.IndexOf('\n')) >= 0)
+                {
+                    string message = accumulated.Substring(0, newlineIndex).Trim(); // Extract one complete message
+                    accumulated = accumulated.Substring(newlineIndex + 1);          // Keep the remainder
+                    if (!string.IsNullOrEmpty(message))
+                    {
+                        OnMessageReceived?.Invoke(message); // Invokes the OnMessageReceived event with the complete message
+                        Debug.Log("[Client] Received from server: " + message.Substring(0, Mathf.Min(120, message.Length)));
+                    }
+                }
+                accumulator.Clear();
+                accumulator.Append(accumulated); // Keep any incomplete trailing data for next read
             }
         }
         finally
@@ -62,7 +87,7 @@ public class TCPClient : MonoBehaviour, IClient
             return;
         }
 
-        byte[] data = Encoding.UTF8.GetBytes(message);// Converts the message string into a byte array using UTF-8 encoding
+        byte[] data = Encoding.UTF8.GetBytes(message + "\n");// Converts the message string into a byte array using UTF-8 encoding (\n required by server ReadLineAsync)
         await networkStream.WriteAsync(data, 0, data.Length);// Writes the byte array to the network stream asynchronously, sending it to the connected server
 
         Debug.Log("[Client] Sent: " + message);
@@ -88,4 +113,3 @@ public class TCPClient : MonoBehaviour, IClient
         await Task.Delay(100);
     }
 }
-
